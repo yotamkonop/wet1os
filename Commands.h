@@ -108,7 +108,7 @@ class ChangePromptCommand : public BuiltInCommand {
 
     std::string prompt;
 
-    explicit ChangePromptCommand(const char *cmd_line);
+    explicit ChangePromptCommand(const char *cmd_line, const std::string &prompt);
 
     virtual ~ChangePromptCommand() = default;
 

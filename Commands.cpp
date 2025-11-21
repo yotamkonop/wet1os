@@ -115,11 +115,9 @@ void SmallShell::setPrompt(const std::string &prompt) {
 }
 
 
-ChangePromptCommand::ChangePromptCommand(const char *cmd_line):BuiltInCommand(cmd_line){
-    string cmd_line_wout_cmd = _ltrim(cmd_line);
-    string first_arg = _trim(string(cmd_line));
-    string prompt = first_arg.substr(0, first_arg.find_first_of(" \n"));
-}
+ChangePromptCommand::ChangePromptCommand(const char *cmd_line, const std::string &prompt): BuiltInCommand(cmd_line),
+prompt(prompt) {}
+
 
 void ChangePromptCommand::execute() {
     if (prompt.empty()) SmallShell::getInstance().setPrompt("smash");
