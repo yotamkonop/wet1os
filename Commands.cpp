@@ -75,7 +75,7 @@ void _removeBackgroundSign(char *cmd_line) {
 
 // TODO: Add your implementation for classes in Commands.h 
 
-SmallShell::SmallShell() {
+SmallShell::SmallShell(): prompt("smash") {
     // TODO: add your implementation
 }
 
@@ -114,3 +114,22 @@ void SmallShell::executeCommand(const char *cmd_line) {
     // cmd->execute();
     // Please note that you must fork smash process for some commands (e.g., external commands....)
 }
+
+std::string SmallShell::getPrompt() const {
+    return prompt;
+}
+
+void SmallShell::setPrompt(const std::string &prompt) {
+    this->prompt = prompt;
+}
+
+
+ChangePromptCommand::ChangePromptCommand(const char *cmd_line, const std::string &plastPwd):BuiltInCommand(cmd_line),
+prompt(plastPwd) {}
+
+void ChangePromptCommand::execute() {
+    SmallShell::getInstance().setPrompt(prompt);
+}
+
+
+
