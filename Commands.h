@@ -95,6 +95,7 @@ public:
 
 class ChangeDirCommand : public BuiltInCommand {
     // TODO: Add your data members public:
+public:
     ChangeDirCommand(const char *cmd_line, char **plastPwd);
 
     virtual ~ChangeDirCommand() {
@@ -107,7 +108,7 @@ class ChangePromptCommand : public BuiltInCommand {
 
 
     std::string prompt;
-
+public:
     explicit ChangePromptCommand(const char *cmd_line, const std::string &prompt);
 
     virtual ~ChangePromptCommand() = default;
@@ -255,7 +256,7 @@ class SmallShell {
 private:
 
     std::string prompt;
-    // TODO: Add your data members
+    std::string last_dir;
     SmallShell();
 
 public:

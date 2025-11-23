@@ -75,7 +75,7 @@ void _removeBackgroundSign(char *cmd_line) {
 
 // TODO: Add your implementation for classes in Commands.h 
 
-SmallShell::SmallShell(): prompt("smash") {
+SmallShell::SmallShell(): prompt("smash"), last_dir("") {
     // TODO: add your implementation
 }
 
@@ -90,6 +90,7 @@ Command *SmallShell::CreateCommand(const char *cmd_line) {
 
     string cmd_s = _trim(string(cmd_line));
     string firstWord = cmd_s.substr(0, cmd_s.find_first_of(" \n"));
+    char **args = new char *[1024]; // TODO change this to a number according to number of arguments or something like that
 
     if (firstWord.compare("pwd") == 0) {
       return new GetCurrDirCommand(cmd_line);
@@ -97,6 +98,13 @@ Command *SmallShell::CreateCommand(const char *cmd_line) {
     else if (firstWord.compare("showpid") == 0) {
       return new ShowPidCommand(cmd_line);
     }
+    else if (firstWord.compare("chprompt") == 0) {
+        _parseCommandLine(cmd_line, args);
+        if (args[1] == NULL) return new ChangePromptCommand(cmd_line, "");
+        return new ChangePromptCommand(cmd_line, string(args[1]));
+    }
+
+
     return nullptr;
 }
 
@@ -134,6 +142,14 @@ void GetCurrDirCommand::execute() {
         std::perror("smash error: getcwd failed");
     }
 }
+
+ShowPidCommand::ShowPidCommand(const char *cmd_line): BuiltInCommand(cmd_line){}
+
+void ShowPidCommand::execute() {
+    std::cout << "smash pid is " << getpid() << '\n';
+}
+
+
 
 
 
