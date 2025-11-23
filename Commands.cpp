@@ -76,12 +76,14 @@ void _removeBackgroundSign(char *cmd_line) {
 // TODO: Add your implementation for classes in Commands.h 
 
 SmallShell::SmallShell(): prompt("smash"), last_dir("") {
-    // TODO: add your implementation
 }
 
-SmallShell::~SmallShell() {
-    // TODO: add your implementation
-}
+SmallShell::~SmallShell() {}
+
+BuiltInCommand::BuiltInCommand(const char *cmd_line): Command(cmd_line) {}
+
+Command::Command(const char *cmd_line): cmd_line(cmd_line){}
+
 
 /**
 * Creates and returns a pointer to Command class which matches the given command line (cmd_line)
@@ -90,7 +92,7 @@ Command *SmallShell::CreateCommand(const char *cmd_line) {
 
     string cmd_s = _trim(string(cmd_line));
     string firstWord = cmd_s.substr(0, cmd_s.find_first_of(" \n"));
-    char **args = new char *[1024]; // TODO change this to a number according to number of arguments or something like that
+
 
     if (firstWord.compare("pwd") == 0) {
       return new GetCurrDirCommand(cmd_line);
@@ -99,14 +101,26 @@ Command *SmallShell::CreateCommand(const char *cmd_line) {
       return new ShowPidCommand(cmd_line);
     }
     else if (firstWord.compare("chprompt") == 0) {
+        char **args = new char *[21];
         _parseCommandLine(cmd_line, args);
         if (args[1] == NULL) return new ChangePromptCommand(cmd_line, "");
-        return new ChangePromptCommand(cmd_line, string(args[1]));
+        std::string prompt = args[1];
+        delete[] args;
+        return new ChangePromptCommand(cmd_line, string(prompt));
     }
+    else if (firstWord.compare("cd") == 0) {
+        return new ChangeDirCommand(cmd_line);
+    }
+
 
 
     return nullptr;
 }
+
+
+
+
+
 
 void SmallShell::executeCommand(const char *cmd_line) {
 
@@ -122,6 +136,16 @@ void SmallShell::setPrompt(const std::string &prompt) {
     this->prompt = prompt;
 }
 
+std::string SmallShell::getLastDir() const {
+    return last_dir;
+}
+
+void SmallShell::setLastDir(const std::string &last_dir) {
+    this->last_dir = last_dir;
+}
+
+
+
 
 ChangePromptCommand::ChangePromptCommand(const char *cmd_line, const std::string &prompt): BuiltInCommand(cmd_line),
 prompt(prompt) {}
@@ -135,18 +159,84 @@ void ChangePromptCommand::execute() {
 GetCurrDirCommand::GetCurrDirCommand(const char *cmd_line): BuiltInCommand(cmd_line) {}
 
 void GetCurrDirCommand::execute() {
-    char buffer[1024];
-    if (getcwd(buffer, sizeof(buffer)) != nullptr) {
-        std::cout << buffer << '\n';
-    } else {
-        std::perror("smash error: getcwd failed");
+    char* buffer = getcwd(NULL, 0);
+    if (!buffer) {
+        perror("smash error: getcwd failed");
+        return;
     }
+    std::cout << buffer << "\n";
+    free(buffer);
 }
 
 ShowPidCommand::ShowPidCommand(const char *cmd_line): BuiltInCommand(cmd_line){}
 
 void ShowPidCommand::execute() {
     std::cout << "smash pid is " << getpid() << '\n';
+}
+
+ChangeDirCommand::ChangeDirCommand(const char *cmd_line): BuiltInCommand(cmd_line) {}
+
+void ChangeDirCommand::execute() {
+    SmallShell &smash = SmallShell::getInstance();
+
+    char *args[100];
+    int argc = _parseCommandLine(cmd_line, args);
+
+    // cd with no arguments -> no impact
+    if (argc == 1) {
+        for (int i = 0; i < argc; ++i) {
+            free(args[i]);
+        }
+        return;
+    }
+
+    // more than one argument -> error
+    if (argc > 2) {
+        std::cerr << "smash error: cd: too many arguments" << std::endl;
+        for (int i = 0; i < argc; ++i) {
+            free(args[i]);
+        }
+        return;
+    }
+
+    // save current directory before changing
+    char cwd[1024];
+    if (!getcwd(cwd, sizeof(cwd))) {
+        perror("smash error: getcwd failed");
+        for (int i = 0; i < argc; ++i) {
+            free(args[i]);
+        }
+        return;
+    }
+
+    const char *target = nullptr;
+
+    if (strcmp(args[1], "-") == 0) {
+        const std::string &last = smash.getLastDir();
+        if (last.empty()) {
+            std::cerr << "smash error: cd: OLDPWD not set" << std::endl;
+            for (int i = 0; i < argc; ++i) {
+                free(args[i]);
+            }
+            return;
+        }
+        target = last.c_str();
+    } else {
+        target = args[1];
+    }
+    if (chdir(target) == -1) {
+        perror("smash error: chdir failed");
+        for (int i = 0; i < argc; ++i) {
+            free(args[i]);
+        }
+        return;
+    }
+
+    smash.setLastDir(std::string(cwd));
+
+    for (int i = 0; i < argc; ++i) {
+        free(args[i]);
+    }
 }
 
 

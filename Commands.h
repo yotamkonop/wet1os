@@ -8,7 +8,8 @@
 #define COMMAND_MAX_ARGS (20)
 
 class Command {
-    // TODO: Add your data members
+protected:
+    const char *cmd_line;
 public:
     Command(const char *cmd_line);
 
@@ -22,6 +23,7 @@ public:
 };
 
 class BuiltInCommand : public Command {
+
 public:
     BuiltInCommand(const char *cmd_line);
 
@@ -96,7 +98,7 @@ public:
 class ChangeDirCommand : public BuiltInCommand {
     // TODO: Add your data members public:
 public:
-    ChangeDirCommand(const char *cmd_line, char **plastPwd);
+    ChangeDirCommand(const char *cmd_line);
 
     virtual ~ChangeDirCommand() {
     }
@@ -278,7 +280,10 @@ public:
     std::string getPrompt() const;
 
     void setPrompt(const std::string &prompt);
-    // TODO: add extra methods as needed
+
+    std::string getLastDir() const;
+
+    void setLastDir(const std::string &last_dir);
 };
 
 #endif //SMASH_COMMAND_H_
