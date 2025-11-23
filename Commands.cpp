@@ -22,6 +22,9 @@ const std::string WHITESPACE = " \n\r\t\f\v";
 #define FUNC_EXIT()
 #endif
 
+
+//start of: parsing functions --------------------------------------------------------------------
+
 string _ltrim(const std::string &s) {
     size_t start = s.find_first_not_of(WHITESPACE);
     return (start == std::string::npos) ? "" : s.substr(start);
@@ -73,7 +76,14 @@ void _removeBackgroundSign(char *cmd_line) {
     cmd_line[str.find_last_not_of(WHITESPACE, idx) + 1] = 0;
 }
 
-// TODO: Add your implementation for classes in Commands.h 
+// end of: parsing functions --------------------------------------------------------------------
+
+
+
+
+
+
+// start of smallShell class --------------------------------------------------------------------
 
 SmallShell::SmallShell(): prompt("smash"), last_dir("") {
 }
@@ -119,42 +129,53 @@ Command *SmallShell::CreateCommand(const char *cmd_line) {
 
 
 
-
-
-
 void SmallShell::executeCommand(const char *cmd_line) {
 
     Command* cmd = CreateCommand(cmd_line);
     cmd->execute();
 }
 
+
 std::string SmallShell::getPrompt() const {
     return prompt;
 }
+
 
 void SmallShell::setPrompt(const std::string &prompt) {
     this->prompt = prompt;
 }
 
+
 std::string SmallShell::getLastDir() const {
     return last_dir;
 }
+
 
 void SmallShell::setLastDir(const std::string &last_dir) {
     this->last_dir = last_dir;
 }
 
+// end of smallShell class --------------------------------------------------------------------
 
+
+
+
+
+
+// start of commands --------------------------------------------------------------------
 
 
 ChangePromptCommand::ChangePromptCommand(const char *cmd_line, const std::string &prompt): BuiltInCommand(cmd_line),
 prompt(prompt) {}
 
 
+
 void ChangePromptCommand::execute() {
     if (prompt.empty()) SmallShell::getInstance().setPrompt("smash");
     else SmallShell::getInstance().setPrompt(prompt);
 }
+
+
 
 GetCurrDirCommand::GetCurrDirCommand(const char *cmd_line): BuiltInCommand(cmd_line) {}
 
@@ -168,11 +189,15 @@ void GetCurrDirCommand::execute() {
     free(buffer);
 }
 
+
+
 ShowPidCommand::ShowPidCommand(const char *cmd_line): BuiltInCommand(cmd_line){}
 
 void ShowPidCommand::execute() {
     std::cout << "smash pid is " << getpid() << '\n';
 }
+
+
 
 ChangeDirCommand::ChangeDirCommand(const char *cmd_line): BuiltInCommand(cmd_line) {}
 

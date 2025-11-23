@@ -254,6 +254,12 @@ public:
     void execute() override;
 };
 
+
+
+
+
+//small shell class --------------------------------------------------------------------
+
 class SmallShell {
 private:
 
