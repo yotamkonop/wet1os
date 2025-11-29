@@ -515,18 +515,19 @@ void AliasMap::printAliases() {
         std::cout << it.first << "=\'" << it.second << "\'" << std::endl;
     }
 }
-const char *AliasMap::replaceAlias(const char *cmd_line) {
+std::string AliasMap::replaceAlias(const char *cmd_line) {
     string cmd_s = _trim(string(cmd_line));
     string firstWord = cmd_s.substr(0, cmd_s.find_first_of(" \n"));
     if(exists(firstWord)) {
         std::string realFirstWord = getAlias(firstWord);
-        size_t pos = s.find(' ');
-        if (pos != std::string::npos) {
-            return realFirstWord.c_str();
+        size_t pos = cmd_s.find(' ');
+        if (pos == std::string::npos) {
+            return realFirstWord;
         }
-        return (firstWord+cmd_s.substr(pos)).c_str();
+        return (realFirstWord+cmd_s.substr(pos));
+
     }
-    return cmd_line;
+    return cmd_s;
 }
 
 

@@ -254,7 +254,7 @@ public:
     bool exists(std::string alias);
     std::string getAlias(std::string alias);
     void printAliases();
-    const char* replaceAlias(const char* cmd_line);
+    std::string replaceAlias(const char* cmd_line);
 };
 
 class AliasCommand : public BuiltInCommand {
