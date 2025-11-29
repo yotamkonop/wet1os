@@ -90,9 +90,9 @@ SmallShell::SmallShell(): prompt("smash"), last_dir("") {
 
 SmallShell::~SmallShell() {}
 
-BuiltInCommand::BuiltInCommand(const char *cmd_line): Command(cmd_line) {}
+BuiltInCommand::BuiltInCommand(const char *cmd_line, pid_t pid): Command(cmd_line, pid) {}
 
-Command::Command(const char *cmd_line): cmd_line(cmd_line){}
+Command::Command(const char *cmd_line, pid_t pid): cmd_line(cmd_line), pid(pid) {}
 
 
 /**
@@ -263,7 +263,92 @@ void ChangeDirCommand::execute() {
         free(args[i]);
     }
 }
-
+JobsList::JobsList() : max_job_id(0) {}
+JobsList::~JobsList() {
+    for (auto job:jobs) {
+        delete job;
+    }
+    jobs.clear();
+}
+void JobsList::addJob(Command *cmd, bool is_stopped) {
+    removeFinishedJobs();
+    int new_job_id = ++max_job_id;
+    jobs.push_back(new JobEntry(new_job_id, cmd->getPID(), is_stopped, cmd->getCMD()));
+}
+void JobsList::printJobsList() {
+    removeFinishedJobs();
+    //Jobs should already be sorted but it should be further checked
+    for (auto job: jobs) {
+        std::cout<< "[" << job->job_id << "] " << job->cmd_line << std::endl;
+    }
+}
+void JobsList::killAllJobs() {
+    removeFinishedJobs();
+    for (auto job: jobs) {
+        //find why this can't resolve kill
+        if (kill(job->pid, SIGKILL)!=0) {
+            perror("smash error: kill failed");
+        }
+    }
+}
+void JobsList::removeFinishedJobs() {
+    auto it = jobs.begin();
+    while (it != jobs.end()) {
+        int status;
+        pid_t result = waitpid((*it)->pid, &status, WHOHANG);
+        if (result > 0) {
+            delete *it;
+            it = jobs.erase(it);
+        }
+        else {
+            it++;
+        }
+    }
+}
+JobsList::JobEntry *JobsList::getJobById(int jobId) {
+    for (auto job:jobs) {
+        if (job->job_id == jobId) {
+            return job;
+        }
+    }
+    return nullptr;
+}
+void JobsList::removeJobById(int jobId) {
+    for (auto it = jobs.begin(); it != jobs.end(); it++) {
+        if ((*it)->job_id == jobId) {
+            delete *it;
+            jobs.erase(it);
+            return;
+        }
+    }
+}
+JobsList::JobEntry *JobsList::getLastJob(int *lastJobId) {
+    removeFinishedJobs();
+    if(jobs.empty()) {
+        return nullptr;
+    }
+    if (lastJobId) {
+        *lastJobId = jobs.back()->job_id;
+    }
+    return jobs.back();
+}
+JobsList::JobEntry *JobsList::getLastStoppedJob(int *jobId) {
+    removeFinishedJobs();
+    JobEntry* last_stopped = nullptr;
+    for (auto job : jobs) {
+        if (job->is_stopped) {
+            last_stopped = job;
+        }
+    }
+    if (jobId) {
+        if (!last_stopped) {
+            *jobId = 0;
+            return last_stopped;
+        }
+        *jobId = last_stopped->job_id;
+    }
+    return last_stopped;
+}
 
 
 

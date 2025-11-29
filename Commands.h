@@ -1,7 +1,6 @@
 // Ver: 04-11-2025
 #ifndef SMASH_COMMAND_H_
 #define SMASH_COMMAND_H_
-
 #include <vector>
 
 #define COMMAND_MAX_LENGTH (200)
@@ -10,8 +9,9 @@
 class Command {
 protected:
     const char *cmd_line;
+    pid_t pid;
 public:
-    Command(const char *cmd_line);
+    Command(const char *cmd_line, pid_t pid);
 
     virtual ~Command();
 
@@ -19,13 +19,18 @@ public:
 
     //virtual void prepare();
     //virtual void cleanup();
-    // TODO: Add your extra methods if needed
+    std::string getCMD() const {
+        return cmd_line;
+    }
+    pid_t getPID() const {
+        return pid;
+    }
 };
 
 class BuiltInCommand : public Command {
 
 public:
-    BuiltInCommand(const char *cmd_line);
+    BuiltInCommand(const char *cmd_line, pid_t pid);
 
     virtual ~BuiltInCommand() {
     }
@@ -153,11 +158,20 @@ class QuitCommand : public BuiltInCommand {
 class JobsList {
 public:
     class JobEntry {
-        // TODO: Add your data members
+    public:
+        int job_id;
+        pid_t pid;
+        bool is_stopped;
+        std::string cmd_line;
+
+        JobEntry(int job_id, pid_t pid,bool is_stopped = false, const std::string& cmd_line) : job_id(job_id), pid(pid),is_stopped(is_stopped), cmd_line(cmd_line) {}
     };
 
-    // TODO: Add your data members
+private:
+    std::vector<JobEntry *> jobs;
+    int max_job_id;
 public:
+
     JobsList();
 
     ~JobsList();
