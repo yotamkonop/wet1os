@@ -9,9 +9,9 @@
 class Command {
 protected:
     const char *cmd_line;
-    pid_t pid;
+    pid_t pid = 0;
 public:
-    Command(const char *cmd_line, pid_t pid);
+    Command(const char *cmd_line);
 
     virtual ~Command();
 
@@ -25,12 +25,15 @@ public:
     pid_t getPID() const {
         return pid;
     }
+    void setPID(pid_t pid) {
+        this->pid = pid;
+    }
 };
 
 class BuiltInCommand : public Command {
 
 public:
-    BuiltInCommand(const char *cmd_line, pid_t pid);
+    BuiltInCommand(const char *cmd_line);
 
     virtual ~BuiltInCommand() {
     }

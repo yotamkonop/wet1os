@@ -90,9 +90,9 @@ SmallShell::SmallShell(): prompt("smash"), last_dir("") {
 
 SmallShell::~SmallShell() {}
 
-BuiltInCommand::BuiltInCommand(const char *cmd_line, pid_t pid): Command(cmd_line, pid) {}
+BuiltInCommand::BuiltInCommand(const char *cmd_line): Command(cmd_line) {}
 
-Command::Command(const char *cmd_line, pid_t pid): cmd_line(cmd_line), pid(pid) {}
+Command::Command(const char *cmd_line): cmd_line(cmd_line) {}
 
 
 /**
@@ -121,7 +121,9 @@ Command *SmallShell::CreateCommand(const char *cmd_line) {
     else if (firstWord.compare("cd") == 0) {
         return new ChangeDirCommand(cmd_line);
     }
-
+    else if (firstWord.compare("jobs") == 0) {
+        return new
+    }
 
 
     return nullptr;
