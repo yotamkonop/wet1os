@@ -111,7 +111,7 @@ Command *SmallShell::CreateCommand(const char *cmd_line) {
       return new ShowPidCommand(cmd_line);
     }
     else if (firstWord.compare("chprompt") == 0) {
-        char **args = new char *[21];
+        char **args = new char *[COMMAND_MAX_ARGS+1];
         _parseCommandLine(cmd_line, args);
         if (args[1] == NULL) return new ChangePromptCommand(cmd_line, "");
         std::string prompt = args[1];
@@ -123,6 +123,9 @@ Command *SmallShell::CreateCommand(const char *cmd_line) {
     }
     else if (firstWord.compare("jobs") == 0) {
         return new JobsCommand(cmd_line, job_list);
+    }
+    else if (firstWord.compare("fg") == 0) {
+        return new ForegroundCommand(cmd_line, job_list);
     }
 
 
@@ -356,6 +359,56 @@ void JobsCommand::execute() {
     jobs->printJobsList();
 }
 
+ForegroundCommand::ForegroundCommand(const char *cmd_line, JobsList *jobs) : BuiltInCommand(cmd_line), jobs(jobs) {}
+
+void ForegroundCommand::execute() {
+    jobs-> removeFinishedJobs();
+    char *args[COMMAND_MAX_ARGS+1];
+    int argc = _parseCommandLine(cmd_line, args);
+    int job_id = 0;
+    JobsList::JobEntry *job = nullptr;
+    if (argc == 1) {
+        if (jobs->isEmpty()) {
+            perror("smash error: fg: jobs list is empty");
+            for (int i = 0; i < argc; ++i) {
+                free(args[i]);
+            }
+            return;
+        }
+        job = jobs->getLastJob(&job_id);
+    }
+    else if (argc == 2) {
+        char* endptr;
+        job_id = strtol(args[1], &endptr, 10);
+        if (endptr != "\0"||job_id <=0) {
+            perror("smash error: fg: invalid arguments");
+            for (int i = 0; i < argc; ++i) {
+                free(args[i]);
+            }
+            return;
+        }
+        JobsList::JobEntry* job = jobs->getJobById(job_id);
+        if (!job) {
+            std::string error = "smash error: fg: jobs-id ";
+            error += std::to_string(job_id);
+            error += " does not exist";
+            perror (error.c_str());
+        }
+    }
+    else {
+        perror("smash error: fg: invalid arguments");
+        for (int i = 0; i < argc; ++i) {
+            free(args[i]);
+        }
+        return;
+    }
+    std::cout << job->cmd_line << " " << job->pid << std::endl;
+    int status;
+    waitpid(job->pid, &pid); // Maybe should add WUNTRACED flag
+    for (int i = 0; i < argc; ++i) {
+        free(args[i]);
+    }
+}
 
 
 
