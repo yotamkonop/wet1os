@@ -99,8 +99,8 @@ Command::Command(const char *cmd_line): cmd_line(cmd_line) {}
 * Creates and returns a pointer to Command class which matches the given command line (cmd_line)
 */
 Command *SmallShell::CreateCommand(const char *cmd_line) {
-
-    string cmd_s = _trim(string(cmd_line));
+    std::string new_cmd_line = alias_map->replaceAlias(cmd_line);
+    string cmd_s = _trim(new_cmd_line);
     string firstWord = cmd_s.substr(0, cmd_s.find_first_of(" \n"));
 
 
@@ -133,7 +133,9 @@ Command *SmallShell::CreateCommand(const char *cmd_line) {
     else if (firstWord.compare("kill") == 0) {
         return new KillCommand(cmd_line, job_list);
     }
-
+    else if (firstWord.compare("alias") == 0) {
+        return new AliasCommand(cmd_line, alias_map);
+    }
     return nullptr;
 }
 
@@ -520,7 +522,7 @@ std::string AliasMap::replaceAlias(const char *cmd_line) {
     string firstWord = cmd_s.substr(0, cmd_s.find_first_of(" \n"));
     if(exists(firstWord)) {
         std::string realFirstWord = getAlias(firstWord);
-        size_t pos = cmd_s.find(' ');
+        size_t pos = cmd_s.find(' '); //may need to look out for special characters too
         if (pos == std::string::npos) {
             return realFirstWord;
         }
@@ -530,6 +532,54 @@ std::string AliasMap::replaceAlias(const char *cmd_line) {
     return cmd_s;
 }
 
+AliasCommand::AliasCommand(const char *cmd_line, AliasMap *map) : BuiltInCommand(cmd_line), map(map) {}
+void AliasCommand::execute() {
+    char *args[COMMAND_MAX_ARGS+1];
+    int argc = _parseCommandLine(cmd_line, args);
+    if (argc>2) {
+        perror("smash error: alias: invalid alias format");
+        for (int i = 0; i < argc; ++i) {
+            free(args[i]);
+        }
+        return;
+    }
+    if (argc == 2) {
+        std::string rest = args[1];
+        size_t eq_pos = rest.find('=');
+        if (eq_pos == std::string::npos) {
+            perror("smash error: alias: invalid alias format");
+            for (int i = 0; i < argc; ++i) {
+                free(args[i]);
+            }
+            return;
+        }
+        std::string alias = rest.substr(0, eq_pos);
+        std::string command = rest.substr(eq_pos+1);
+        for (char c : alias) {
+            if (!std::isalnum(c)&& c!='_') {
+                perror("smash error: alias: invalid alias format");
+                for (int i = 0; i < argc; ++i) {
+                    free(args[i]);
+                }
+                return;
+            }
+        }
+        if (map->exists(alias)) {
+            std::string error = "smash error: alias: ";
+            error += alias;
+            error += " already exists or is a reserved command";
+            perror (error.c_str());
+            for (int i = 0; i < argc; ++i) {
+                free(args[i]);
+            }
+            return;
+        }
+        map->addAlias(alias, command);
+    }
+    else {
+        map->printAliases();
+    }
+}
 
 
 

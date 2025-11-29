@@ -258,8 +258,10 @@ public:
 };
 
 class AliasCommand : public BuiltInCommand {
+private:
+    AliasMap* map;
 public:
-    AliasCommand(const char *cmd_line);
+    AliasCommand(const char *cmd_line, AliasMap* map);
 
     virtual ~AliasCommand() {
     }
@@ -309,6 +311,7 @@ private:
     std::string prompt;
     std::string last_dir;
     JobsList *job_list;
+    AliasMap *alias_map;
     SmallShell();
 
 public:
