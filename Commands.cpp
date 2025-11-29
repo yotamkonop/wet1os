@@ -524,7 +524,7 @@ const char *AliasMap::replaceAlias(const char *cmd_line) {
         if (pos != std::string::npos) {
             return realFirstWord.c_str();
         }
-        return (firstWord+cmd_s.substr(pos+1)).c_str();
+        return (firstWord+cmd_s.substr(pos)).c_str();
     }
     return cmd_line;
 }
