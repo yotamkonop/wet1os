@@ -127,7 +127,9 @@ Command *SmallShell::CreateCommand(const char *cmd_line) {
     else if (firstWord.compare("fg") == 0) {
         return new ForegroundCommand(cmd_line, job_list);
     }
-
+    else if (firstWord.compare("quit") == 0) {
+        return new QuitCommand(cmd_line, job_list);
+    }
 
     return nullptr;
 }
@@ -291,7 +293,10 @@ void JobsList::killAllJobs() {
     removeFinishedJobs();
     for (auto job: jobs) {
         //find why this can't resolve kill
-        if (kill(job->pid, SIGKILL)!=0) {
+        if (kill(job->pid, SIGKILL) ==0) {
+            std::cout << job->pid << ": " << job->cmd_line << std::endl;
+        }
+        else {
             perror("smash error: kill failed");
         }
     }
@@ -409,6 +414,26 @@ void ForegroundCommand::execute() {
         free(args[i]);
     }
 }
+
+QuitCommand::QuitCommand(const char *cmd_line, JobsList *jobs) : BuiltInCommand(cmd_line), jobs(jobs) {}
+void QuitCommand::execute() {
+    char *args[COMMAND_MAX_ARGS+1];
+    int argc = _parseCommandLine(cmd_line, args);
+    bool kill = false;
+    if (argc >1 && strcmp(args[1], "kill") == 0) {
+        kill = true;
+    }
+    if (kill) {
+        int job_count = jobs->getJobCount();
+        std::cout << "smash: sending SIGKILL signal to " << job_count <<" jobs"<< std::endl;
+        jobs->killAllJobs();
+    }
+    for (int i = 0; i < argc; ++i) {
+        free(args[i]);
+    }
+    exit(0);
+}
+
 
 
 
