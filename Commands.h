@@ -199,7 +199,8 @@ public:
 };
 
 class JobsCommand : public BuiltInCommand {
-    // TODO: Add your data members
+private:
+    JobsList *jobs;
 public:
     JobsCommand(const char *cmd_line, JobsList *jobs);
 
@@ -282,6 +283,7 @@ private:
 
     std::string prompt;
     std::string last_dir;
+    JobsList *job_list;
     SmallShell();
 
 public:

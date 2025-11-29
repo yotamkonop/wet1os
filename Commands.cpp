@@ -122,7 +122,7 @@ Command *SmallShell::CreateCommand(const char *cmd_line) {
         return new ChangeDirCommand(cmd_line);
     }
     else if (firstWord.compare("jobs") == 0) {
-        return new
+        return new JobsCommand(cmd_line, job_list);
     }
 
 
@@ -351,6 +351,11 @@ JobsList::JobEntry *JobsList::getLastStoppedJob(int *jobId) {
     }
     return last_stopped;
 }
+JobsCommand::JobsCommand(const char *cmd_line, JobsList *jobs) : BuiltInCommand(cmd_line), jobs(jobs) {}
+void JobsCommand::execute() {
+    jobs->printJobsList();
+}
+
 
 
 
