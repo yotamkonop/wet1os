@@ -495,6 +495,42 @@ void KillCommand::execute() {
     }
 }
 
+void AliasMap::addAlias(std::string alias, std::string command) {
+    map.insert({alias, command});
+}
+void AliasMap::removeAlias(std::string alias) {
+    map.erase(alias);
+}
+bool AliasMap::exists(std::string alias) {
+    return map.find(alias) == map.end();
+}
+std::string AliasMap::getAlias(std::string alias) {
+    if (map.find(alias) == map.end()) {
+        return "";
+    }
+    return map.find(alias)->second;
+}
+void AliasMap::printAliases() {
+    for (auto & it : map) {
+        std::cout << it.first << "=\'" << it.second << "\'" << std::endl;
+    }
+}
+const char *AliasMap::replaceAlias(const char *cmd_line) {
+    string cmd_s = _trim(string(cmd_line));
+    string firstWord = cmd_s.substr(0, cmd_s.find_first_of(" \n"));
+    if(exists(firstWord)) {
+        std::string realFirstWord = getAlias(firstWord);
+        size_t pos = s.find(' ');
+        if (pos != std::string::npos) {
+            return realFirstWord.c_str();
+        }
+        return (firstWord+cmd_s.substr(pos+1)).c_str();
+    }
+    return cmd_line;
+}
+
+
+
 
 
 

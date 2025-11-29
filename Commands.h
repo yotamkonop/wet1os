@@ -1,6 +1,7 @@
 // Ver: 04-11-2025
 #ifndef SMASH_COMMAND_H_
 #define SMASH_COMMAND_H_
+#include <map>
 #include <vector>
 
 #define COMMAND_MAX_LENGTH (200)
@@ -240,6 +241,20 @@ public:
     }
 
     void execute() override;
+};
+
+class AliasMap {
+private:
+    std::map<std::string, std::string> map;
+public:
+    AliasMap();
+    ~AliasMap();
+    void addAlias(std::string alias, std::string command);
+    void removeAlias(std::string alias);
+    bool exists(std::string alias);
+    std::string getAlias(std::string alias);
+    void printAliases();
+    const char* replaceAlias(const char* cmd_line);
 };
 
 class AliasCommand : public BuiltInCommand {
