@@ -270,8 +270,10 @@ public:
 };
 
 class UnAliasCommand : public BuiltInCommand {
+private:
+    AliasMap* map;
 public:
-    UnAliasCommand(const char *cmd_line);
+    UnAliasCommand(const char *cmd_line, AliasMap* map);
 
     virtual ~UnAliasCommand() {
     }

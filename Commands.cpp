@@ -581,6 +581,32 @@ void AliasCommand::execute() {
     }
 }
 
+UnAliasCommand::UnAliasCommand(const char *cmd_line, AliasMap *map) : BuiltInCommand(cmd_line), map(map) {}
+void UnAliasCommand::execute() {
+    char *args[COMMAND_MAX_ARGS+1];
+    int argc = _parseCommandLine(cmd_line, args);
+    if (argc<2) {
+        perror("smash error: unalias: not enough arguments");
+        for (int i = 0; i < argc; ++i) {
+            free(args[i]);
+        }
+        return;
+    }
+    for (int j = 1; j < argc; ++j) {
+        if (!map->exists(args[j])) {
+            std::string error = "smash error: unalias: ";
+            error += args[j];
+            error += " does not exist";
+            perror (error.c_str());
+            for (int i = 0; i < argc; ++i) {
+                free(args[i]);
+            }
+            return;
+        }
+        map->removeAlias(args[j]);
+    }
+
+}
 
 
 
