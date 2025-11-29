@@ -574,6 +574,21 @@ void AliasCommand::execute() {
             }
             return;
         }
+        std::vector<std::string> reserved = {
+            "chprompt", "showpid", "pwd", "cd", "jobs", "fg", "quit",
+            "kill", "alias", "unalias", "unsetenv", "sysinfo"};
+        for (auto keyword : reserved) {
+            if (alias == keyword) {
+                std::string error = "smash error: alias: ";
+                error += alias;
+                error += " already exists or is a reserved command";
+                perror (error.c_str());
+                for (int i = 0; i < argc; ++i) {
+                    free(args[i]);
+                }
+                return;
+            }
+        }
         map->addAlias(alias, command);
     }
     else {
