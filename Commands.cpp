@@ -130,6 +130,9 @@ Command *SmallShell::CreateCommand(const char *cmd_line) {
     else if (firstWord.compare("quit") == 0) {
         return new QuitCommand(cmd_line, job_list);
     }
+    else if (firstWord.compare("kill") == 0) {
+        return new KillCommand(cmd_line, job_list);
+    }
 
     return nullptr;
 }
@@ -398,6 +401,10 @@ void ForegroundCommand::execute() {
             error += std::to_string(job_id);
             error += " does not exist";
             perror (error.c_str());
+            for (int i = 0; i < argc; ++i) {
+                free(args[i]);
+            }
+            return;
         }
     }
     else {
@@ -434,6 +441,59 @@ void QuitCommand::execute() {
     exit(0);
 }
 
+KillCommand::KillCommand(const char *cmd_line, JobsList *jobs) : BuiltInCommand(cmd_line), jobs(jobs) {}
+void KillCommand::execute() {
+    char *args[COMMAND_MAX_ARGS+1];
+    int argc = _parseCommandLine(cmd_line, args);
+    if (argc != 3) {
+        perror("smash error: kill: invalid arguments");
+        for (int i = 0; i < argc; ++i) {
+            free(args[i]);
+        }
+        return;
+    }
+    if (args[1][0] != '-') {
+        perror("smash error: kill: invalid arguments");
+        for (int i = 0; i < argc; ++i) {
+            free(args[i]);
+        }
+        return;
+    }
+    char* endptr;
+    int signum = strtol(args[1]+1, &endptr, 10);
+    if (endptr != "\0"||signum <=0) {
+        perror("smash error: kill: invalid arguments");
+        for (int i = 0; i < argc; ++i) {
+            free(args[i]);
+        }
+        return;
+    }
+    int job_id = strtol(args[2], &endptr, 10);
+    if (endptr != "\0"||job_id <=0) {
+        perror("smash error: kill: invalid arguments");
+        for (int i = 0; i < argc; ++i) {
+            free(args[i]);
+        }
+        return;
+    }
+    JobsList::JobEntry* job = jobs->getJobById(job_id);
+    if (!job) {
+        std::string error = "smash error: kill: jobs-id ";
+        error += std::to_string(job_id);
+        error += " does not exist";
+        perror (error.c_str());
+        for (int i = 0; i < argc; ++i) {
+            free(args[i]);
+        }
+        return;
+    }
+    //here maybe a check of was it successful is necessary
+    kill(job->pid, signum);
+    std::cout << "signal number " << signum << " was sent to pid " << job->pid << std::endl;
+    for (int i = 0; i < argc; ++i) {
+        free(args[i]);
+    }
+}
 
 
 

@@ -220,7 +220,7 @@ public:
 };
 
 class KillCommand : public BuiltInCommand {
-    // TODO: Add your data members
+    JobsList* jobs;
 public:
     KillCommand(const char *cmd_line, JobsList *jobs);
 
