@@ -1,11 +1,13 @@
 #include <unistd.h>
 #include <string.h>
+#include <fcntl.h>
 #include <iostream>
 #include <vector>
 #include <sstream>
 #include <sys/wait.h>
 #include <iomanip>
 #include "Commands.h"
+
 
 using namespace std;
 
@@ -141,7 +143,12 @@ Command *SmallShell::CreateCommand(const char *cmd_line) {
     else if (firstWord.compare("alias") == 0) {
         return new AliasCommand(cmd_line, alias_map);
     }
-    return nullptr;
+    else if (firstWord.compare("unalias") == 0) {
+        return new UnAliasCommand(cmd_line, alias_map);
+    }
+    else if (firstWord.compare("unsetenv") == 0) {
+        return new UnSetEnvCommand(cmd_line);
+    }
 }
 
 
@@ -175,10 +182,7 @@ void SmallShell::setLastDir(const std::string &last_dir) {
 // end of smallShell class --------------------------------------------------------------------
 
 
-// start of alias map ------------------------------------------------------------------------
 
-AliasMap::AliasMap() = default;
-AliasMap::~AliasMap() = default;
 
 
 
@@ -511,6 +515,81 @@ void KillCommand::execute() {
     }
 }
 
+
+UnSetEnvCommand::UnSetEnvCommand(const char *cmd_line): BuiltInCommand(cmd_line) {}
+
+void UnSetEnvCommand::execute() {
+    char *args[COMMAND_MAX_ARGS + 1];
+    int argc = _parseCommandLine(cmd_line, args);
+    if (argc <= 1) {
+        perror("smash error: unsetenv: not enough arguments");
+        for (int i = 0; i < argc; ++i) {
+            free(args[i]);
+        }
+        return;
+    }
+    pid_t pid = getpid();
+    std::string path = "/proc/" + std::to_string(pid) + "/environ";
+
+    int fd = open(path.c_str(), O_RDONLY);
+    if (fd == -1) {
+        perror("smash error: open failed");
+        return;
+    }
+
+    // read file in chunks
+    std::vector<char> buffer;
+    char temp[4096];
+
+    ssize_t bytes_read;
+    while ((bytes_read = read(fd, temp, sizeof(temp))) > 0) {
+        buffer.insert(buffer.end(), temp, temp + bytes_read);
+    }
+
+    if (bytes_read == -1) {
+        perror("smash error: read failed");
+    }
+
+    close(fd);
+
+    std::string allEnvVar = std::string(buffer.begin(), buffer.end());
+
+    for (int i = 1; i < argc; ++i) {
+        std::string currentEnvVar = std::string(args[i]);
+        if (allEnvVar.find(currentEnvVar) == std::string::npos) {
+            perror(("smash error: unsetenv: " + currentEnvVar + " does not exist").c_str());
+            for (int i = 0; i < argc; ++i) {
+                free(args[i]);
+            }
+            return;
+        }
+        for (int i = 0; __environ[i] != 0; i++) {
+            bool isSame = true;
+            for (int j = 0; j < currentEnvVar.size() && __environ[i][j] != '='; j++) {
+                if (__environ[i][j] != currentEnvVar[j]) {
+                    isSame = false;
+                }
+            }
+            if (isSame) {
+
+                do {
+                    environ[i] = environ[i+1];
+                    i++;
+                } while (environ[i] != 0);
+                break;
+            }
+        }
+    }
+    for (int i = 0; i < argc; ++i) {
+        free(args[i]);
+    }
+}
+
+// start of alias map ------------------------------------------------------------------------
+
+AliasMap::AliasMap() = default;
+AliasMap::~AliasMap() = default;
+
 void AliasMap::addAlias(std::string alias, std::string command) {
     map.insert({alias, command});
 }
@@ -545,6 +624,12 @@ std::string AliasMap::replaceAlias(const char *cmd_line) {
     }
     return cmd_s;
 }
+
+// end of alias map ----------------------------------------------------
+
+
+
+
 
 AliasCommand::AliasCommand(const char *cmd_line, AliasMap *map) : BuiltInCommand(cmd_line), map(map) {}
 void AliasCommand::execute() {
