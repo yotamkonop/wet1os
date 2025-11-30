@@ -86,9 +86,14 @@ void _removeBackgroundSign(char *cmd_line) {
 // start of smallShell class --------------------------------------------------------------------
 
 SmallShell::SmallShell(): prompt("smash"), last_dir("") {
+    alias_map = new AliasMap();
+    job_list = new JobsList();
 }
 
-SmallShell::~SmallShell() {}
+SmallShell::~SmallShell() {
+    delete alias_map;
+    delete job_list;
+}
 
 BuiltInCommand::BuiltInCommand(const char *cmd_line): Command(cmd_line) {}
 
@@ -170,11 +175,20 @@ void SmallShell::setLastDir(const std::string &last_dir) {
 // end of smallShell class --------------------------------------------------------------------
 
 
+// start of alias map ------------------------------------------------------------------------
+
+AliasMap::AliasMap() = default;
+AliasMap::~AliasMap() = default;
+
 
 
 
 
 // start of commands --------------------------------------------------------------------
+
+
+Command::~Command() = default;
+
 
 
 ChangePromptCommand::ChangePromptCommand(const char *cmd_line, const std::string &prompt): BuiltInCommand(cmd_line),
@@ -216,7 +230,7 @@ ChangeDirCommand::ChangeDirCommand(const char *cmd_line): BuiltInCommand(cmd_lin
 void ChangeDirCommand::execute() {
     SmallShell &smash = SmallShell::getInstance();
 
-    char *args[100];
+    char *args[COMMAND_MAX_ARGS + 1];
     int argc = _parseCommandLine(cmd_line, args);
 
     // cd with no arguments -> no impact
@@ -285,11 +299,11 @@ JobsList::~JobsList() {
 void JobsList::addJob(Command *cmd, bool is_stopped) {
     removeFinishedJobs();
     int new_job_id = ++max_job_id;
-    jobs.push_back(new JobEntry(new_job_id, cmd->getPID(), is_stopped, cmd->getCMD()));
+    jobs.push_back(new JobEntry(new_job_id, cmd->getPID(), cmd->getCMD(), is_stopped));
 }
 void JobsList::printJobsList() {
     removeFinishedJobs();
-    //Jobs should already be sorted but it should be further checked
+    //Jobs should already be sorted, but it should be further checked
     for (auto job: jobs) {
         std::cout<< "[" << job->job_id << "] " << job->cmd_line << std::endl;
     }
@@ -310,7 +324,7 @@ void JobsList::removeFinishedJobs() {
     auto it = jobs.begin();
     while (it != jobs.end()) {
         int status;
-        pid_t result = waitpid((*it)->pid, &status, WHOHANG);
+        pid_t result = waitpid((*it)->pid, &status, WNOHANG);
         if (result > 0) {
             delete *it;
             it = jobs.erase(it);
@@ -390,7 +404,7 @@ void ForegroundCommand::execute() {
     else if (argc == 2) {
         char* endptr;
         job_id = strtol(args[1], &endptr, 10);
-        if (endptr != "\0"||job_id <=0) {
+        if (*endptr != '\0'||job_id <=0) {
             perror("smash error: fg: invalid arguments");
             for (int i = 0; i < argc; ++i) {
                 free(args[i]);
@@ -418,7 +432,7 @@ void ForegroundCommand::execute() {
     }
     std::cout << job->cmd_line << " " << job->pid << std::endl;
     int status;
-    waitpid(job->pid, &pid); // Maybe should add WUNTRACED flag
+    waitpid(job->pid, &pid, 0); // Maybe should add WUNTRACED flag
     for (int i = 0; i < argc; ++i) {
         free(args[i]);
     }
@@ -463,7 +477,7 @@ void KillCommand::execute() {
     }
     char* endptr;
     int signum = strtol(args[1]+1, &endptr, 10);
-    if (endptr != "\0"||signum <=0) {
+    if (*endptr != '\0'||signum <=0) {
         perror("smash error: kill: invalid arguments");
         for (int i = 0; i < argc; ++i) {
             free(args[i]);
@@ -471,7 +485,7 @@ void KillCommand::execute() {
         return;
     }
     int job_id = strtol(args[2], &endptr, 10);
-    if (endptr != "\0"||job_id <=0) {
+    if (*endptr != '\0'||job_id <=0) {
         perror("smash error: kill: invalid arguments");
         for (int i = 0; i < argc; ++i) {
             free(args[i]);
@@ -504,7 +518,7 @@ void AliasMap::removeAlias(std::string alias) {
     map.erase(alias);
 }
 bool AliasMap::exists(std::string alias) {
-    return map.find(alias) == map.end();
+    return map.find(alias) != map.end();
 }
 std::string AliasMap::getAlias(std::string alias) {
     if (map.find(alias) == map.end()) {

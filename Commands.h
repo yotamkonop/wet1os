@@ -170,7 +170,7 @@ public:
         bool is_stopped;
         std::string cmd_line;
 
-        JobEntry(int job_id, pid_t pid,bool is_stopped = false, const std::string& cmd_line) : job_id(job_id), pid(pid),is_stopped(is_stopped), cmd_line(cmd_line) {}
+        JobEntry(int job_id, pid_t pid, const std::string& cmd_line,bool is_stopped = false) : job_id(job_id), pid(pid),is_stopped(is_stopped), cmd_line(cmd_line) {}
     };
 
 private:
