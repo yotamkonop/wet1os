@@ -104,7 +104,9 @@ SmallShell::~SmallShell() {
 
 BuiltInCommand::BuiltInCommand(const char *cmd_line): Command(cmd_line) {}
 
-Command::Command(const char *cmd_line): cmd_line(cmd_line) {}
+Command::Command(const char *cmd_line): cmd_line(nullptr) {
+    this->cmd_line = strdup(cmd_line);
+}
 
 
 /**
@@ -116,46 +118,42 @@ Command *SmallShell::CreateCommand(const char *cmd_line) {
     string firstWord = cmd_s.substr(0, cmd_s.find_first_of(" \n"));
 
 
+
     if (firstWord.compare("pwd") == 0) {
-      return new GetCurrDirCommand(cmd_line);
+      return new GetCurrDirCommand(new_cmd_line.c_str());
     }
     else if (firstWord.compare("showpid") == 0) {
-      return new ShowPidCommand(cmd_line);
+      return new ShowPidCommand(new_cmd_line.c_str());
     }
     else if (firstWord.compare("chprompt") == 0) {
-        char **args = new char *[COMMAND_MAX_ARGS+1];
-        _parseCommandLine(cmd_line, args);
-        if (args[1] == NULL) return new ChangePromptCommand(cmd_line, "");
-        std::string prompt = args[1];
-        delete[] args;
-        return new ChangePromptCommand(cmd_line, string(prompt));
+        return new ChangePromptCommand(new_cmd_line.c_str());
     }
     else if (firstWord.compare("cd") == 0) {
-        return new ChangeDirCommand(cmd_line);
+        return new ChangeDirCommand(new_cmd_line.c_str());
     }
     else if (firstWord.compare("jobs") == 0) {
-        return new JobsCommand(cmd_line, job_list);
+        return new JobsCommand(new_cmd_line.c_str(), job_list);
     }
     else if (firstWord.compare("fg") == 0) {
-        return new ForegroundCommand(cmd_line, job_list);
+        return new ForegroundCommand(new_cmd_line.c_str(), job_list);
     }
     else if (firstWord.compare("quit") == 0) {
-        return new QuitCommand(cmd_line, job_list);
+        return new QuitCommand(new_cmd_line.c_str(), job_list);
     }
     else if (firstWord.compare("kill") == 0) {
-        return new KillCommand(cmd_line, job_list);
+        return new KillCommand(new_cmd_line.c_str(), job_list);
     }
     else if (firstWord.compare("alias") == 0) {
-        return new AliasCommand(cmd_line, alias_map);
+        return new AliasCommand(new_cmd_line.c_str(), alias_map);
     }
     else if (firstWord.compare("unalias") == 0) {
-        return new UnAliasCommand(cmd_line, alias_map);
+        return new UnAliasCommand(new_cmd_line.c_str(), alias_map);
     }
     else if (firstWord.compare("unsetenv") == 0) {
-        return new UnSetEnvCommand(cmd_line);
+        return new UnSetEnvCommand(new_cmd_line.c_str());
     }
     else if (firstWord.compare("sysinfo") == 0) {
-        return new SysInfoCommand(cmd_line);
+        return new SysInfoCommand(new_cmd_line.c_str());
     }
 }
 
@@ -199,18 +197,27 @@ void SmallShell::setLastDir(const std::string &last_dir) {
 // start of commands --------------------------------------------------------------------
 
 
-Command::~Command() = default;
+Command::~Command() {
+    free((void *)cmd_line);
+}
 
 
 
-ChangePromptCommand::ChangePromptCommand(const char *cmd_line, const std::string &prompt): BuiltInCommand(cmd_line),
-prompt(prompt) {}
+ChangePromptCommand::ChangePromptCommand(const char *cmd_line): BuiltInCommand(cmd_line){}
 
 
 
 void ChangePromptCommand::execute() {
-    if (prompt.empty()) SmallShell::getInstance().setPrompt("smash");
-    else SmallShell::getInstance().setPrompt(prompt);
+    char *args[COMMAND_MAX_ARGS+1];
+    int argc = _parseCommandLine(cmd_line, args);
+    if (argc <= 1) SmallShell::getInstance().setPrompt("smash");
+    else {
+        std::string prompt = args[1];
+        SmallShell::getInstance().setPrompt(prompt);
+    }
+    for (int i = 0; i < argc; i++) {
+        free(args[i]);
+    }
 }
 
 
@@ -423,7 +430,7 @@ void ForegroundCommand::execute() {
             }
             return;
         }
-        JobsList::JobEntry* job = jobs->getJobById(job_id);
+        job = jobs->getJobById(job_id);
         if (!job) {
             std::string error = "smash error: fg: jobs-id ";
             error += std::to_string(job_id);
@@ -444,7 +451,7 @@ void ForegroundCommand::execute() {
     }
     std::cout << job->cmd_line << " " << job->pid << std::endl;
     int status;
-    waitpid(job->pid, &pid, 0); // Maybe should add WUNTRACED flag
+    waitpid(job->pid, &status, 0); // Maybe should add WUNTRACED flag
     for (int i = 0; i < argc; ++i) {
         free(args[i]);
     }
@@ -636,6 +643,9 @@ void SysInfoCommand::execute() {
 
 }
 
+ExternalCommand::ExternalCommand(const char *cmd_line): Command(cmd_line) {}
+
+
 
 
 // start of alias map ------------------------------------------------------------------------
@@ -742,9 +752,15 @@ void AliasCommand::execute() {
             }
         }
         map->addAlias(alias, command);
+        for (int i = 0; i < argc; ++i) {
+            free(args[i]);
+        }
     }
     else {
         map->printAliases();
+        for (int i = 0; i < argc; ++i) {
+            free(args[i]);
+        }
     }
 }
 
@@ -771,6 +787,10 @@ void UnAliasCommand::execute() {
             return;
         }
         map->removeAlias(args[j]);
+
+    }
+    for (int i = 0; i < argc; ++i) {
+        free(args[i]);
     }
 
 }

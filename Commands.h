@@ -48,7 +48,10 @@ public:
     }
 
     void execute() override;
+
 };
+
+
 
 
 class RedirectionCommand : public Command {
@@ -117,10 +120,8 @@ public:
 
 class ChangePromptCommand : public BuiltInCommand {
 
-
-    std::string prompt;
 public:
-    explicit ChangePromptCommand(const char *cmd_line, const std::string &prompt);
+    explicit ChangePromptCommand(const char *cmd_line);
 
     virtual ~ChangePromptCommand() = default;
 
