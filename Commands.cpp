@@ -7,6 +7,11 @@
 #include <sys/wait.h>
 #include <iomanip>
 #include "Commands.h"
+#include <sys/utsname.h>
+#include <sys/sysinfo.h>
+#include <time.h>
+#include <cstdio>
+#include <cstring>
 
 
 using namespace std;
@@ -148,6 +153,9 @@ Command *SmallShell::CreateCommand(const char *cmd_line) {
     }
     else if (firstWord.compare("unsetenv") == 0) {
         return new UnSetEnvCommand(cmd_line);
+    }
+    else if (firstWord.compare("sysinfo") == 0) {
+        return new SysInfoCommand(cmd_line);
     }
 }
 
@@ -584,6 +592,51 @@ void UnSetEnvCommand::execute() {
         free(args[i]);
     }
 }
+
+
+SysInfoCommand::SysInfoCommand(const char *cmd_line): BuiltInCommand(cmd_line) {}
+
+void SysInfoCommand::execute() {
+    struct utsname uts{};
+    if (uname(&uts) == -1) {
+        perror("smash error: sysinfo: uname failed");
+        return;
+    }
+
+    struct sysinfo si{};
+    if (sysinfo(&si) == -1) {
+        perror("smash error: sysinfo: sysinfo failed");
+        return;
+    }
+
+    time_t now = time(nullptr);
+    if (now == (time_t)-1) {
+        perror("smash error: sysinfo: time failed");
+        return;
+    }
+
+    time_t boot_time = now - si.uptime;
+
+    struct tm boot_tm{};
+    if (!localtime_r(&boot_time, &boot_tm)) {
+        perror("smash error: sysinfo: localtime_r failed");
+        return;
+    }
+
+    char boot_str[64];
+    if (!strftime(boot_str, sizeof(boot_str), "%Y-%m-%d %H:%M:%S", &boot_tm)) {
+        std::strcpy(boot_str, "unknown");
+    }
+
+    std::cout << "System: "      << uts.sysname  << std::endl;
+    std::cout << "Hostname: "    << uts.nodename << std::endl;
+    std::cout << "Kernel: "      << uts.release  << std::endl;
+    std::cout << "Architecture: "<< uts.machine  << std::endl;
+    std::cout << "Boot Time: "   << boot_str     << std::endl;
+
+}
+
+
 
 // start of alias map ------------------------------------------------------------------------
 
