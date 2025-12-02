@@ -155,6 +155,9 @@ Command *SmallShell::CreateCommand(const char *cmd_line) {
     else if (firstWord.compare("sysinfo") == 0) {
         return new SysInfoCommand(new_cmd_line.c_str());
     }
+    else {
+        return new ExternalCommand(new_cmd_line.c_str());
+    }
 }
 
 
@@ -162,7 +165,9 @@ Command *SmallShell::CreateCommand(const char *cmd_line) {
 void SmallShell::executeCommand(const char *cmd_line) {
 
     Command* cmd = CreateCommand(cmd_line);
+    cmd->setPID(getpid());
     cmd->execute();
+    job_list->addJob(cmd);
 }
 
 
@@ -644,6 +649,73 @@ void SysInfoCommand::execute() {
 }
 
 ExternalCommand::ExternalCommand(const char *cmd_line): Command(cmd_line) {}
+
+void ExternalCommand::execute() {
+    std::string cmd = std::string(cmd_line);
+    std::string cmd_trimmed = _rtrim(cmd);
+
+    if (cmd_trimmed.empty()) {
+        return;
+    }
+
+    bool isBackground = (cmd_trimmed[cmd_trimmed.size() - 1] == '&');
+    if (isBackground) {
+        cmd_trimmed = cmd_trimmed.substr(0, cmd_trimmed.size() - 1);
+        cmd_trimmed = _rtrim(cmd_trimmed);
+    }
+
+    bool isComplex = false;
+    for (char c : cmd_trimmed) {
+        if (c == '*' || c == '?') {
+            isComplex = true;
+            break;
+        }
+    }
+
+    if (cmd_trimmed.empty()) {
+        return;
+    }
+    int argc = 0;
+    char *args[COMMAND_MAX_ARGS + 1];
+    if (isComplex) {
+        args[0] = strdup("bash");
+        args[1] = strdup("-c");
+        args[2] = strdup(cmd_trimmed.c_str());
+        args[3] = NULL;
+        argc = 3;
+    }
+    else {
+        argc = _parseCommandLine(cmd_trimmed.c_str(), args);
+    }
+
+    if (argc == 0) {
+        return;
+    }
+
+    pid_t pid = fork();
+
+    if (pid == -1) {
+        perror("smash error: fork failed");
+        for (int i = 0; i < argc; ++i) {
+            free(args[i]);
+        }
+        return;
+    }
+
+
+    if (pid == 0) {
+        execvp(args[0], args);
+        perror("smash error: execvp failed");
+        exit(1);
+    }
+    if (!isBackground) {
+        waitpid(pid, NULL, 0);
+    }
+    for (int i = 0; i < argc; ++i) {
+        free(args[i]);
+    }
+    this->setPID(pid);
+}
 
 
 
