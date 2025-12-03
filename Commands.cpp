@@ -13,6 +13,11 @@
 #include <cstdio>
 #include <cstring>
 #include <sys/stat.h>
+#include <pwd.h>
+#include <sys/types.h>
+#include <sys/syscall.h>
+#include <limits.h>
+#include <ctype.h>
 
 using namespace std;
 
@@ -34,17 +39,6 @@ const std::string WHITESPACE = " \n\r\t\f\v";
 
 
 
-
-bool is_stdout_same_as_original(int original_stdout) {
-    struct stat st_curr{}, st_orig{};
-
-    if (fstat(STDOUT_FILENO, &st_curr) == -1) return false;
-    if (fstat(original_stdout, &st_orig) == -1) return false;
-
-    // Same device + inode = same underlying file
-    return (st_curr.st_dev == st_orig.st_dev) &&
-           (st_curr.st_ino == st_orig.st_ino);
-}
 
 
 string _ltrim(const std::string &s) {
@@ -98,6 +92,7 @@ void _removeBackgroundSign(char *cmd_line) {
     cmd_line[str.find_last_not_of(WHITESPACE, idx) + 1] = 0;
 }
 
+
 // end of: parsing functions --------------------------------------------------------------------
 
 
@@ -107,7 +102,7 @@ void _removeBackgroundSign(char *cmd_line) {
 
 // start of smallShell class --------------------------------------------------------------------
 
-SmallShell::SmallShell(): prompt("smash"), last_dir(""), saved_stdout(dup(1)) {
+SmallShell::SmallShell(): prompt("smash"), last_dir("") {
 
     alias_map = new AliasMap();
     job_list = new JobsList();
@@ -116,7 +111,6 @@ SmallShell::SmallShell(): prompt("smash"), last_dir(""), saved_stdout(dup(1)) {
 SmallShell::~SmallShell() {
     delete alias_map;
     delete job_list;
-    close(saved_stdout);
 }
 
 BuiltInCommand::BuiltInCommand(const char *cmd_line): Command(cmd_line) {}
@@ -137,55 +131,13 @@ Command *SmallShell::CreateCommand(const char *cmd_line) {
 
     bool isRedirect = (cmd_s.find('>') != string::npos);
     if (isRedirect) {
-        if (cmd_s.back() == '&') {
-            cmd_s.pop_back();
-        }
-        cmd_s = _trim(cmd_s);
-        char *args[COMMAND_MAX_ARGS + 1];
-        int argc = _parseCommandLine(cmd_s.c_str(), args);
-        int flag = 0;
-        if (argc < 3) {
-            for (int i = 0; i < argc; i++) {
-                free(args[i]);
-            }
-            return nullptr;
-        }
-        else if (std::string(args[argc - 2]) == ">") {
-            flag = O_TRUNC;
-        }
-        else if (std::string(args[argc - 2]) == ">>") {
-            flag = O_APPEND;
-        }
-        else {
-            for (int i = 0; i < argc; i++) {
-                free(args[i]);
-            }
-            return nullptr;
-        }
-        int fd = open(args[argc - 1], O_WRONLY | O_CREAT | flag, 0666);
-        if (fd == -1) {
-            perror("smash error: open failed");
-            for (int i = 0; i < argc; i++) {
-                free(args[i]);
-            }
-            return nullptr;
-        }
-        if (dup2(fd, STDOUT_FILENO) == -1) {
-            perror("smash error: dup2 failed");
-            close(fd);
-            for (int i = 0; i < argc; i++) {
-                free(args[i]);
-            }
-            return nullptr;
-        }
-        close(fd);
-        for (int i = 0; i < argc; i++) {
-            free(args[i]);
-        }
-        cmd_s = cmd_s.substr(0, cmd_s.find_first_of('>'));
-        cmd_s = _trim(cmd_s);
+        return new RedirectionCommand(cmd_s.c_str());
     }
 
+    bool isPipe = (cmd_s.find('|') != string::npos);
+    if (isPipe) {
+        return new PipeCommand(cmd_s.c_str());
+    }
 
 
     if (firstWord.compare("pwd") == 0) {
@@ -229,21 +181,17 @@ Command *SmallShell::CreateCommand(const char *cmd_line) {
     }
 }
 
+JobsList *SmallShell::getJobsList() const{
+    return job_list;
+}
 
 
 void SmallShell::executeCommand(const char *cmd_line) {
 
     Command* cmd = CreateCommand(cmd_line);
-    if (cmd != nullptr) {
-        cmd->setPID(getpid());
-        cmd->execute();
-        job_list->addJob(cmd);
-    }
-    if (!is_stdout_same_as_original(saved_stdout)) {
-        dup2(saved_stdout, 1);
-    }
 
-
+    cmd->setPID(getpid());
+    cmd->execute();
 }
 
 
@@ -280,6 +228,150 @@ void SmallShell::setLastDir(const std::string &last_dir) {
 
 Command::~Command() {
     free((void *)cmd_line);
+}
+
+PipeCommand::PipeCommand(const char *cmd_line): Command(cmd_line){}
+
+
+void PipeCommand::execute() {
+    std::string line(cmd_line);
+    size_t pos = line.find('|');
+    std::string left  = _trim(line.substr(0, pos));
+    std::string right = _trim(line.substr(pos + 1));
+
+    int pipefd[2];
+    if (pipe(pipefd) == -1) {
+        perror("smash error: pipe failed");
+        return;
+    }
+
+    pid_t left_pid = fork();
+    if (left_pid == -1) {
+        perror("smash error: fork failed");
+        close(pipefd[0]);
+        close(pipefd[1]);
+        return;
+    }
+
+    if (left_pid == 0) {
+
+        setpgrp();
+        if (dup2(pipefd[1], STDOUT_FILENO) == -1) {
+            perror("smash error: dup2 failed");
+            exit(1);
+        }
+        close(pipefd[0]);
+        close(pipefd[1]);
+
+
+        char *args[COMMAND_MAX_ARGS + 1];
+        int argc = _parseCommandLine(left.c_str(), args);
+        execvp(args[0], args);
+        perror("smash error: execvp failed");
+        exit(1);
+    }
+
+    pid_t right_pid = fork();
+    if (right_pid == -1) {
+        perror("smash error: fork failed");
+
+        close(pipefd[0]);
+        close(pipefd[1]);
+        return;
+    }
+
+    if (right_pid == 0) {
+
+        setpgrp();
+        if (dup2(pipefd[0], STDIN_FILENO) == -1) {
+            perror("smash error: dup2 failed");
+            exit(1);
+        }
+        close(pipefd[1]);
+        close(pipefd[0]);
+
+        char *args[COMMAND_MAX_ARGS + 1];
+        int argc = _parseCommandLine(right.c_str(), args);
+        execvp(args[0], args);
+        perror("smash error: execvp failed");
+        exit(1);
+    }
+
+
+    close(pipefd[0]);
+    close(pipefd[1]);
+
+
+    int status;
+    waitpid(left_pid, &status, 0);
+    waitpid(right_pid, &status, 0);
+}
+
+
+
+RedirectionCommand::RedirectionCommand(const char *cmd_line): Command(cmd_line) {}
+
+void RedirectionCommand::execute() {
+    std::string cmd_s = cmd_line;
+    if (cmd_s.back() == '&') {
+        cmd_s.pop_back();
+    }
+    cmd_s = _trim(cmd_s);
+    char *args[COMMAND_MAX_ARGS + 1];
+    int argc = _parseCommandLine(cmd_s.c_str(), args);
+    int flag = 0;
+    if (argc < 3) {
+        for (int i = 0; i < argc; i++) {
+            free(args[i]);
+        }
+        return;
+    }
+    else if (std::string(args[argc - 2]) == ">") {
+        flag = O_TRUNC;
+    }
+    else if (std::string(args[argc - 2]) == ">>") {
+        flag = O_APPEND;
+    }
+    else {
+        for (int i = 0; i < argc; i++) {
+            free(args[i]);
+        }
+        return;
+    }
+    int fd = open(args[argc - 1], O_WRONLY | O_CREAT | flag, 0666);
+    if (fd == -1) {
+        perror("smash error: open failed");
+        for (int i = 0; i < argc; i++) {
+            free(args[i]);
+        }
+        return;
+    }
+    int saved_stdout = dup(1);
+    if (saved_stdout == -1) {
+        perror("smash error: dup failed");
+        close(fd);
+        for (int i = 0; i < argc; i++) {
+            free(args[i]);
+        }
+        return;
+    }
+    if (dup2(fd, STDOUT_FILENO) == -1) {
+        perror("smash error: dup2 failed");
+        close(fd);
+        for (int i = 0; i < argc; i++) {
+            free(args[i]);
+        }
+        return;
+    }
+    close(fd);
+    for (int i = 0; i < argc; i++) {
+        free(args[i]);
+    }
+    cmd_s = cmd_s.substr(0, cmd_s.find_first_of('>'));
+    cmd_s = _trim(cmd_s);
+    Command *cmd = SmallShell::getInstance().CreateCommand(cmd_s.c_str());
+    cmd->execute();
+    dup2(saved_stdout, 1);
 }
 
 
@@ -668,6 +760,7 @@ void UnSetEnvCommand::execute() {
             for (int j = 0; j < currentEnvVar.size() && __environ[i][j] != '='; j++) {
                 if (__environ[i][j] != currentEnvVar[j]) {
                     isSame = false;
+                    break;
                 }
                 t = j;
             }
@@ -792,15 +885,18 @@ void ExternalCommand::execute() {
         setpgrp();
         execvp(args[0], args);
         perror("smash error: execvp failed");
-        return;
+        exit(1);
     }
     if (!isBackground) {
         waitpid(pid, NULL, 0);
     }
+    else {
+        this->setPID(pid);
+        SmallShell::getInstance().getJobsList()->addJob(this);
+    }
     for (int i = 0; i < argc; ++i) {
         free(args[i]);
     }
-    this->setPID(pid);
 }
 
 

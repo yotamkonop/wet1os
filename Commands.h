@@ -311,7 +311,6 @@ public:
 class SmallShell {
 private:
 
-    int saved_stdout;
     std::string prompt;
     std::string last_dir;
     JobsList *job_list;
@@ -341,6 +340,8 @@ public:
     std::string getLastDir() const;
 
     void setLastDir(const std::string &last_dir);
+
+    JobsList *getJobsList() const;
 };
 
 #endif //SMASH_COMMAND_H_
