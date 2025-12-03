@@ -556,7 +556,7 @@ void ChangeDirCommand::execute() {
 
     // more than one argument -> error
     if (argc > 2) {
-        std::cerr << "smash error: cd: too many arguments" << std::endl;
+        perror("smash error: cd: too many arguments");
         for (int i = 0; i < argc; ++i) {
             free(args[i]);
         }
@@ -578,7 +578,7 @@ void ChangeDirCommand::execute() {
     if (strcmp(args[1], "-") == 0) {
         const std::string &last = smash.getLastDir();
         if (last.empty()) {
-            std::cerr << "smash error: cd: OLDPWD not set" << std::endl;
+            perror("smash error: cd: OLDPWD not set");
             for (int i = 0; i < argc; ++i) {
                 free(args[i]);
             }
@@ -1334,7 +1334,7 @@ void USBInfoCommand::execute() {
     }
 
     if (devices.empty()) {
-        std::cerr << "smash error: usbinfo: no USB devices found" << std::endl;
+        perror("smash error: usbinfo: no USB devices found");
         return;
     }
 
