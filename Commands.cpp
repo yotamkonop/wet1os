@@ -12,7 +12,7 @@
 #include <time.h>
 #include <cstdio>
 #include <cstring>
-
+#include <sys/stat.h>
 
 using namespace std;
 
@@ -30,7 +30,22 @@ const std::string WHITESPACE = " \n\r\t\f\v";
 #endif
 
 
-//start of: parsing functions --------------------------------------------------------------------
+//start of: helper functions --------------------------------------------------------------------
+
+
+
+
+bool is_stdout_same_as_original(int original_stdout) {
+    struct stat st_curr{}, st_orig{};
+
+    if (fstat(STDOUT_FILENO, &st_curr) == -1) return false;
+    if (fstat(original_stdout, &st_orig) == -1) return false;
+
+    // Same device + inode = same underlying file
+    return (st_curr.st_dev == st_orig.st_dev) &&
+           (st_curr.st_ino == st_orig.st_ino);
+}
+
 
 string _ltrim(const std::string &s) {
     size_t start = s.find_first_not_of(WHITESPACE);
@@ -92,7 +107,8 @@ void _removeBackgroundSign(char *cmd_line) {
 
 // start of smallShell class --------------------------------------------------------------------
 
-SmallShell::SmallShell(): prompt("smash"), last_dir("") {
+SmallShell::SmallShell(): prompt("smash"), last_dir(""), saved_stdout(dup(1)) {
+
     alias_map = new AliasMap();
     job_list = new JobsList();
 }
@@ -100,6 +116,7 @@ SmallShell::SmallShell(): prompt("smash"), last_dir("") {
 SmallShell::~SmallShell() {
     delete alias_map;
     delete job_list;
+    close(saved_stdout);
 }
 
 BuiltInCommand::BuiltInCommand(const char *cmd_line): Command(cmd_line) {}
@@ -118,45 +135,97 @@ Command *SmallShell::CreateCommand(const char *cmd_line) {
     string firstWord = cmd_s.substr(0, cmd_s.find_first_of(" \n"));
 
 
+    bool isRedirect = (cmd_s.find('>') != string::npos);
+    if (isRedirect) {
+        if (cmd_s.back() == '&') {
+            cmd_s.pop_back();
+        }
+        cmd_s = _trim(cmd_s);
+        char *args[COMMAND_MAX_ARGS + 1];
+        int argc = _parseCommandLine(cmd_s.c_str(), args);
+        int flag = 0;
+        if (argc < 3) {
+            for (int i = 0; i < argc; i++) {
+                free(args[i]);
+            }
+            return nullptr;
+        }
+        else if (std::string(args[argc - 2]) == ">") {
+            flag = O_TRUNC;
+        }
+        else if (std::string(args[argc - 2]) == ">>") {
+            flag = O_APPEND;
+        }
+        else {
+            for (int i = 0; i < argc; i++) {
+                free(args[i]);
+            }
+            return nullptr;
+        }
+        int fd = open(args[argc - 1], O_WRONLY | O_CREAT | flag, 0666);
+        if (fd == -1) {
+            perror("smash error: open failed");
+            for (int i = 0; i < argc; i++) {
+                free(args[i]);
+            }
+            return nullptr;
+        }
+        if (dup2(fd, STDOUT_FILENO) == -1) {
+            perror("smash error: dup2 failed");
+            close(fd);
+            for (int i = 0; i < argc; i++) {
+                free(args[i]);
+            }
+            return nullptr;
+        }
+        close(fd);
+        for (int i = 0; i < argc; i++) {
+            free(args[i]);
+        }
+        cmd_s = cmd_s.substr(0, cmd_s.find_first_of('>'));
+        cmd_s = _trim(cmd_s);
+    }
+
+
 
     if (firstWord.compare("pwd") == 0) {
-      return new GetCurrDirCommand(new_cmd_line.c_str());
+      return new GetCurrDirCommand(cmd_s.c_str());
     }
     else if (firstWord.compare("showpid") == 0) {
-      return new ShowPidCommand(new_cmd_line.c_str());
+      return new ShowPidCommand(cmd_s.c_str());
     }
     else if (firstWord.compare("chprompt") == 0) {
-        return new ChangePromptCommand(new_cmd_line.c_str());
+        return new ChangePromptCommand(cmd_s.c_str());
     }
     else if (firstWord.compare("cd") == 0) {
-        return new ChangeDirCommand(new_cmd_line.c_str());
+        return new ChangeDirCommand(cmd_s.c_str());
     }
     else if (firstWord.compare("jobs") == 0) {
-        return new JobsCommand(new_cmd_line.c_str(), job_list);
+        return new JobsCommand(cmd_s.c_str(), job_list);
     }
     else if (firstWord.compare("fg") == 0) {
-        return new ForegroundCommand(new_cmd_line.c_str(), job_list);
+        return new ForegroundCommand(cmd_s.c_str(), job_list);
     }
     else if (firstWord.compare("quit") == 0) {
-        return new QuitCommand(new_cmd_line.c_str(), job_list);
+        return new QuitCommand(cmd_s.c_str(), job_list);
     }
     else if (firstWord.compare("kill") == 0) {
-        return new KillCommand(new_cmd_line.c_str(), job_list);
+        return new KillCommand(cmd_s.c_str(), job_list);
     }
     else if (firstWord.compare("alias") == 0) {
-        return new AliasCommand(new_cmd_line.c_str(), alias_map);
+        return new AliasCommand(cmd_s.c_str(), alias_map);
     }
     else if (firstWord.compare("unalias") == 0) {
-        return new UnAliasCommand(new_cmd_line.c_str(), alias_map);
+        return new UnAliasCommand(cmd_s.c_str(), alias_map);
     }
     else if (firstWord.compare("unsetenv") == 0) {
-        return new UnSetEnvCommand(new_cmd_line.c_str());
+        return new UnSetEnvCommand(cmd_s.c_str());
     }
     else if (firstWord.compare("sysinfo") == 0) {
-        return new SysInfoCommand(new_cmd_line.c_str());
+        return new SysInfoCommand(cmd_s.c_str());
     }
     else {
-        return new ExternalCommand(new_cmd_line.c_str());
+        return new ExternalCommand(cmd_s.c_str());
     }
 }
 
@@ -165,9 +234,16 @@ Command *SmallShell::CreateCommand(const char *cmd_line) {
 void SmallShell::executeCommand(const char *cmd_line) {
 
     Command* cmd = CreateCommand(cmd_line);
-    cmd->setPID(getpid());
-    cmd->execute();
-    job_list->addJob(cmd);
+    if (cmd != nullptr) {
+        cmd->setPID(getpid());
+        cmd->execute();
+        job_list->addJob(cmd);
+    }
+    if (!is_stdout_same_as_original(saved_stdout)) {
+        dup2(saved_stdout, 1);
+    }
+
+
 }
 
 
@@ -554,6 +630,9 @@ void UnSetEnvCommand::execute() {
     int fd = open(path.c_str(), O_RDONLY);
     if (fd == -1) {
         perror("smash error: open failed");
+        for (int i = 0; i < argc; ++i) {
+            free(args[i]);
+        }
         return;
     }
 
@@ -576,7 +655,7 @@ void UnSetEnvCommand::execute() {
 
     for (int i = 1; i < argc; ++i) {
         std::string currentEnvVar = std::string(args[i]);
-        if (allEnvVar.find(currentEnvVar) == std::string::npos) {
+        if (allEnvVar.find(currentEnvVar + "=") == std::string::npos) {
             perror(("smash error: unsetenv: " + currentEnvVar + " does not exist").c_str());
             for (int i = 0; i < argc; ++i) {
                 free(args[i]);
@@ -585,11 +664,17 @@ void UnSetEnvCommand::execute() {
         }
         for (int i = 0; __environ[i] != 0; i++) {
             bool isSame = true;
+            int t = 0;
             for (int j = 0; j < currentEnvVar.size() && __environ[i][j] != '='; j++) {
                 if (__environ[i][j] != currentEnvVar[j]) {
                     isSame = false;
                 }
+                t = j;
             }
+            if (__environ[i][t]) {
+                if (__environ[i][t + 1] != '=') isSame = false;
+            }
+
             if (isSame) {
 
                 do {
@@ -704,9 +789,10 @@ void ExternalCommand::execute() {
 
 
     if (pid == 0) {
+        setpgrp();
         execvp(args[0], args);
         perror("smash error: execvp failed");
-        exit(1);
+        return;
     }
     if (!isBackground) {
         waitpid(pid, NULL, 0);

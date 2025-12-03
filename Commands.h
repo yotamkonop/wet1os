@@ -311,6 +311,7 @@ public:
 class SmallShell {
 private:
 
+    int saved_stdout;
     std::string prompt;
     std::string last_dir;
     JobsList *job_list;
