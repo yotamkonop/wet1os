@@ -97,7 +97,14 @@ public:
 };
 
 class USBInfoCommand : public Command {
-    // TODO: Add your data members **BONUS: 10 Points**
+    struct UsbDeviceInfo {
+        int devnum;
+        std::string vendor;
+        std::string product;
+        std::string manufacturer;
+        std::string product_name;
+        std::string max_power; // just the number or "N/A"
+    };
 public:
     USBInfoCommand(const char *cmd_line);
 

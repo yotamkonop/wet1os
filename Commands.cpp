@@ -18,6 +18,7 @@
 #include <sys/syscall.h>
 #include <limits.h>
 #include <ctype.h>
+#include <algorithm>
 
 using namespace std;
 
@@ -92,6 +93,117 @@ void _removeBackgroundSign(char *cmd_line) {
     cmd_line[str.find_last_not_of(WHITESPACE, idx) + 1] = 0;
 }
 
+
+static bool read_first_line(const std::string& path, std::string& out) {
+    int fd = open(path.c_str(), O_RDONLY);
+    if (fd == -1) {
+        return false;
+    }
+
+    char buf[256];
+    ssize_t n = read(fd, buf, sizeof(buf) - 1);
+    close(fd);
+
+    if (n <= 0) {
+        return false;
+    }
+
+    buf[n] = '\0';
+    std::string s(buf);
+
+    // cut at newline
+    size_t pos = s.find_first_of("\r\n");
+    if (pos != std::string::npos) {
+        s = s.substr(0, pos);
+    }
+
+    out = _trim(s);
+    return !out.empty();
+}
+
+
+static bool list_dir_entries(const std::string& path,
+                             std::vector<std::string>& names) {
+    int fd = open(path.c_str(), O_RDONLY | O_DIRECTORY);
+    if (fd == -1) {
+        return false;
+    }
+
+    struct linux_dirent64 {
+        ino64_t        d_ino;
+        off64_t        d_off;
+        unsigned short d_reclen;
+        unsigned char  d_type;
+        char           d_name[];
+    };
+
+    const int BUF_SIZE = 4096;
+    char buf[BUF_SIZE];
+
+    for (;;) {
+        int nread = syscall(SYS_getdents64, fd, buf, BUF_SIZE);
+        if (nread == -1) {
+            close(fd);
+            return false;
+        }
+        if (nread == 0) {
+            break; // EOF
+        }
+
+        int bpos = 0;
+        while (bpos < nread) {
+            struct linux_dirent64* d =
+                (struct linux_dirent64*)(buf + bpos);
+            std::string name = d->d_name;
+
+            if (name != "." && name != "..") {
+                names.push_back(name);
+            }
+            bpos += d->d_reclen;
+        }
+    }
+
+    close(fd);
+    return true;
+}
+
+static int du_recursive(const std::string& path, unsigned long long& total_bytes) {
+    struct stat st{};
+    if (lstat(path.c_str(), &st) == -1) {
+        perror("smash error: du: lstat failed");
+        return -1;
+    }
+
+    // Do NOT follow symlinks – ignore them entirely
+    if (S_ISLNK(st.st_mode)) {
+        return 0;
+    }
+
+    // Count disk usage using st_blocks (512-byte units)
+    total_bytes += static_cast<unsigned long long>(st.st_blocks) * 512ULL;
+
+    if (!S_ISDIR(st.st_mode)) {
+        return 0;
+    }
+
+    std::vector<std::string> children;
+    if (!list_dir_entries(path, children)) {
+        perror("smash error: du: read directory failed");
+        return -1;
+    }
+
+    for (const auto& name : children) {
+        std::string child = path;
+        if (!child.empty() && child.back() != '/') {
+            child += "/";
+        }
+        child += name;
+
+        du_recursive(child, total_bytes); // ignore individual errors
+    }
+
+    return 0;
+}
 
 // end of: parsing functions --------------------------------------------------------------------
 
@@ -175,6 +287,15 @@ Command *SmallShell::CreateCommand(const char *cmd_line) {
     }
     else if (firstWord.compare("sysinfo") == 0) {
         return new SysInfoCommand(cmd_s.c_str());
+    }
+    else if (firstWord.compare("du") == 0) {
+        return new DiskUsageCommand(cmd_s.c_str());
+    }
+    else if (firstWord.compare("whoami") == 0) {
+        return new WhoAmICommand(cmd_s.c_str());
+    }
+    else if (firstWord.compare("usbinfo") == 0) {
+        return new USBInfoCommand(cmd_s.c_str());
     }
     else {
         return new ExternalCommand(cmd_s.c_str());
@@ -1051,5 +1172,189 @@ void UnAliasCommand::execute() {
 
 
 
+DiskUsageCommand::DiskUsageCommand(const char *cmd_line)
+    : Command(cmd_line) {}
+
+void DiskUsageCommand::execute() {
+    char *args[COMMAND_MAX_ARGS + 1];
+    int argc = _parseCommandLine(cmd_line, args);
+
+    std::string path;
+
+    if (argc > 2) {
+
+        perror("smash error: du: too many arguments");
+        for (int i = 0; i < argc; ++i) {
+            free(args[i]);
+        }
+        return;
+    }
+
+    if (argc == 1) {
+        // no path given -> use cwd
+        char cwd[PATH_MAX];
+        if (!getcwd(cwd, sizeof(cwd))) {
+            perror("smash error: du: getcwd failed");
+            for (int i = 0; i < argc; ++i) {
+                free(args[i]);
+            }
+            return;
+        }
+        path = cwd;
+    } else {
+        path = args[1];
+    }
+
+    for (int i = 0; i < argc; ++i) {
+        free(args[i]);
+    }
+
+    unsigned long long total_bytes = 0;
+    if (du_recursive(path, total_bytes) == -1) {
+
+        return;
+    }
+
+    unsigned long long total_kb = (total_bytes + 1023ULL) / 1024ULL;
+
+    std::cout << "Total disk usage: " << total_kb << " KB" << std::endl;
+}
 
 
+WhoAmICommand::WhoAmICommand(const char *cmd_line)
+    : Command(cmd_line) {}
+
+
+void WhoAmICommand::execute() {
+    // Parse and immediately free args – they are ignored by spec
+    char *args[COMMAND_MAX_ARGS + 1];
+    int argc = _parseCommandLine(cmd_line, args);
+    for (int i = 0; i < argc; ++i) {
+        free(args[i]);
+    }
+
+    uid_t uid = getuid();
+    gid_t gid = getgid();
+
+    struct passwd pw{};
+    struct passwd* result = nullptr;
+    char buf[4096];
+
+    if (getpwuid_r(uid, &pw, buf, sizeof(buf), &result) != 0 || !result) {
+        perror("smash error: whoami: getpwuid_r failed");
+        return;
+    }
+
+    std::cout << uid << std::endl;
+    std::cout << gid << std::endl;
+    std::cout << pw.pw_name << " " << pw.pw_dir << std::endl;
+}
+
+
+USBInfoCommand::USBInfoCommand(const char *cmd_line)
+    : Command(cmd_line) {}
+
+
+void USBInfoCommand::execute() {
+    // Ignore any arguments (but free them)
+    char *args[COMMAND_MAX_ARGS + 1];
+    int argc = _parseCommandLine(cmd_line, args);
+    for (int i = 0; i < argc; ++i) {
+        free(args[i]);
+    }
+
+    const std::string base = "/sys/bus/usb/devices";
+
+    std::vector<std::string> entries;
+    if (!list_dir_entries(base, entries)) {
+        perror("smash error: usbinfo: cannot read /sys/bus/usb/devices");
+        return;
+    }
+
+    std::vector<UsbDeviceInfo> devices;
+
+    for (const auto& name : entries) {
+        std::string devpath = base + "/" + name;
+
+        // devnum tells us it's a "real" USB device
+        std::string devnum_str;
+        if (!read_first_line(devpath + "/devnum", devnum_str)) {
+            continue; // not a real device directory
+        }
+
+        char* endptr = nullptr;
+        long devnum = strtol(devnum_str.c_str(), &endptr, 10);
+        if (endptr == devnum_str.c_str() || devnum <= 0) {
+            continue; // malformed devnum
+        }
+
+        UsbDeviceInfo info{};
+        info.devnum = (int)devnum;
+
+        std::string vendor, product, manu, prodname;
+
+        if (!read_first_line(devpath + "/idVendor", vendor))
+            vendor = "N/A";
+        if (!read_first_line(devpath + "/idProduct", product))
+            product = "N/A";
+        if (!read_first_line(devpath + "/manufacturer", manu))
+            manu = "N/A";
+        if (!read_first_line(devpath + "/product", prodname))
+            prodname = "N/A";
+
+        info.vendor = vendor;
+        info.product = product;
+        info.manufacturer = manu;
+        info.product_name = prodname;
+
+        // Max power: try bMaxPower, then power/max_power
+        std::string mp;
+        if (!read_first_line(devpath + "/bMaxPower", mp)) {
+            read_first_line(devpath + "/power/max_power", mp);
+        }
+
+        if (mp.empty()) {
+            info.max_power = "N/A";
+        } else {
+            // Extract digits only
+            std::string digits;
+            for (char c : mp) {
+                if (isdigit((unsigned char)c)) {
+                    digits.push_back(c);
+                }
+            }
+            if (digits.empty()) {
+                info.max_power = "N/A";
+            } else {
+                info.max_power = digits; // we'll add "mA" on print
+            }
+        }
+
+        devices.push_back(info);
+    }
+
+    if (devices.empty()) {
+        std::cerr << "smash error: usbinfo: no USB devices found" << std::endl;
+        return;
+    }
+
+    // sort by devnum ascending
+    std::sort(devices.begin(), devices.end(),
+              [](const UsbDeviceInfo& a, const UsbDeviceInfo& b) {
+                  return a.devnum < b.devnum;
+              });
+
+    for (const auto& d : devices) {
+        std::cout << "Device " << d.devnum << ": ID "
+                  << d.vendor << ":" << d.product << " "
+                  << d.manufacturer << " " << d.product_name
+                  << " MaxPower: ";
+
+        if (d.max_power == "N/A") {
+            std::cout << "N/A";
+        } else {
+            std::cout << d.max_power << "mA";
+        }
+        std::cout << std::endl;
+    }
+}
