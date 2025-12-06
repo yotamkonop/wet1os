@@ -19,7 +19,7 @@
 #include <limits.h>
 #include <ctype.h>
 #include <algorithm>
-
+#include "signals.h"
 using namespace std;
 
 const std::string WHITESPACE = " \n\r\t\f\v";
@@ -424,8 +424,10 @@ void PipeCommand::execute() {
 
 
     int status;
+    setForegroundPid(right_pid); //by killing right_pid we will also kill left_pid
     waitpid(left_pid, &status, 0);
     waitpid(right_pid, &status, 0);
+    setForegroundPid(0);
 }
 
 
@@ -745,7 +747,10 @@ void ForegroundCommand::execute() {
     }
     std::cout << job->cmd_line << " " << job->pid << std::endl;
     int status;
+    setForegroundPid(job->pid);
     waitpid(job->pid, &status, 0); // Maybe should add WUNTRACED flag
+    setForegroundPid(0);
+    jobs->removeJobById(job_id);
     for (int i = 0; i < argc; ++i) {
         free(args[i]);
     }
@@ -1009,7 +1014,9 @@ void ExternalCommand::execute() {
         exit(1);
     }
     if (!isBackground) {
+        setForegroundPid(pid);
         waitpid(pid, NULL, 0);
+        setForegroundPid(0);
     }
     else {
         this->setPID(pid);
@@ -1113,7 +1120,7 @@ void AliasCommand::execute() {
         }
         std::vector<std::string> reserved = {
             "chprompt", "showpid", "pwd", "cd", "jobs", "fg", "quit",
-            "kill", "alias", "unalias", "unsetenv", "sysinfo"};
+            "kill", "alias", "unalias", "unsetenv", "sysinfo"}; //we may need to check for more
         for (auto keyword : reserved) {
             if (alias == keyword) {
                 std::string error = "smash error: alias: ";
