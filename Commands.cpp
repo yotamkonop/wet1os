@@ -728,7 +728,7 @@ void ForegroundCommand::execute() {
         }
         job = jobs->getJobById(job_id);
         if (!job) {
-            std::string error = "smash error: fg: jobs-id ";
+            std::string error = "smash error: fg: job-id ";
             error += std::to_string(job_id);
             error += " does not exist";
             perror (error.c_str());
@@ -766,7 +766,7 @@ void QuitCommand::execute() {
     }
     if (kill) {
         int job_count = jobs->getJobCount();
-        std::cout << "smash: sending SIGKILL signal to " << job_count <<" jobs"<< std::endl;
+        std::cout << "smash: sending SIGKILL signal to " << job_count <<" jobs:"<< std::endl;
         jobs->killAllJobs();
     }
     for (int i = 0; i < argc; ++i) {
