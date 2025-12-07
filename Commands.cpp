@@ -239,7 +239,7 @@ Command *SmallShell::CreateCommand(const char *cmd_line) {
     std::string new_cmd_line = alias_map->replaceAlias(cmd_line);
     string cmd_s = _trim(new_cmd_line);
     string firstWord = cmd_s.substr(0, cmd_s.find_first_of(" \n"));
-
+    job_list->removeFinishedJobs();
 
     bool isRedirect = (cmd_s.find('>') != string::npos);
     if (isRedirect) {
@@ -781,7 +781,9 @@ void QuitCommand::execute() {
         kill = true;
     }
     if (kill) {
+
         int job_count = jobs->getJobCount();
+
         std::cout << "smash: sending SIGKILL signal to " << job_count <<" jobs:"<< std::endl;
         jobs->killAllJobs();
     }
