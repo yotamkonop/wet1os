@@ -170,7 +170,7 @@ static bool list_dir_entries(const std::string& path,
 static int du_recursive(const std::string& path, unsigned long long& total_bytes) {
     struct stat st{};
     if (lstat(path.c_str(), &st) == -1) {
-        perror("smash error: du: lstat failed");
+        perror("smash error: lstat failed");
         return -1;
     }
 
@@ -188,7 +188,7 @@ static int du_recursive(const std::string& path, unsigned long long& total_bytes
 
     std::vector<std::string> children;
     if (!list_dir_entries(path, children)) {
-        perror("smash error: du: read directory failed");
+        perror("smash error: open failed");
         return -1;
     }
 
@@ -558,7 +558,7 @@ void ChangeDirCommand::execute() {
 
     // more than one argument -> error
     if (argc > 2) {
-        perror("smash error: cd: too many arguments");
+        std::cerr << ("smash error: cd: too many arguments") << std::endl;
         for (int i = 0; i < argc; ++i) {
             free(args[i]);
         }
@@ -580,7 +580,7 @@ void ChangeDirCommand::execute() {
     if (strcmp(args[1], "-") == 0) {
         const std::string &last = smash.getLastDir();
         if (last.empty()) {
-            perror("smash error: cd: OLDPWD not set");
+            std::cerr<<("smash error: cd: OLDPWD not set")<<std::endl;
             for (int i = 0; i < argc; ++i) {
                 free(args[i]);
             }
@@ -708,7 +708,7 @@ void ForegroundCommand::execute() {
     JobsList::JobEntry *job = nullptr;
     if (argc == 1) {
         if (jobs->isEmpty()) {
-            perror("smash error: fg: jobs list is empty");
+            std::cerr<<("smash error: fg: jobs list is empty")<<std::endl;
             for (int i = 0; i < argc; ++i) {
                 free(args[i]);
             }
@@ -720,7 +720,7 @@ void ForegroundCommand::execute() {
         char* endptr;
         job_id = strtol(args[1], &endptr, 10);
         if (*endptr != '\0'||job_id <=0) {
-            perror("smash error: fg: invalid arguments");
+            std::cerr<<("smash error: fg: invalid arguments")<<std::endl;
             for (int i = 0; i < argc; ++i) {
                 free(args[i]);
             }
@@ -731,7 +731,7 @@ void ForegroundCommand::execute() {
             std::string error = "smash error: fg: job-id ";
             error += std::to_string(job_id);
             error += " does not exist";
-            perror (error.c_str());
+            std::cerr << (error.c_str()) << std::endl;
             for (int i = 0; i < argc; ++i) {
                 free(args[i]);
             }
@@ -739,7 +739,7 @@ void ForegroundCommand::execute() {
         }
     }
     else {
-        perror("smash error: fg: invalid arguments");
+        std::cerr<<("smash error: fg: invalid arguments")<<std::endl;
         for (int i = 0; i < argc; ++i) {
             free(args[i]);
         }
@@ -780,14 +780,14 @@ void KillCommand::execute() {
     char *args[COMMAND_MAX_ARGS+1];
     int argc = _parseCommandLine(cmd_line, args);
     if (argc != 3) {
-        perror("smash error: kill: invalid arguments");
+        std::cerr<<("smash error: kill: invalid arguments")<<std::endl;
         for (int i = 0; i < argc; ++i) {
             free(args[i]);
         }
         return;
     }
     if (args[1][0] != '-') {
-        perror("smash error: kill: invalid arguments");
+        std::cerr << ("smash error: kill: invalid arguments") << std::endl;
         for (int i = 0; i < argc; ++i) {
             free(args[i]);
         }
@@ -796,7 +796,7 @@ void KillCommand::execute() {
     char* endptr;
     int signum = strtol(args[1]+1, &endptr, 10);
     if (*endptr != '\0'||signum <=0) {
-        perror("smash error: kill: invalid arguments");
+        std::cerr << ("smash error: kill: invalid arguments") << std::endl;
         for (int i = 0; i < argc; ++i) {
             free(args[i]);
         }
@@ -804,7 +804,7 @@ void KillCommand::execute() {
     }
     int job_id = strtol(args[2], &endptr, 10);
     if (*endptr != '\0'||job_id <=0) {
-        perror("smash error: kill: invalid arguments");
+         std::cerr << ("smash error: kill: invalid arguments") << std::endl;
         for (int i = 0; i < argc; ++i) {
             free(args[i]);
         }
@@ -815,14 +815,16 @@ void KillCommand::execute() {
         std::string error = "smash error: kill: jobs-id ";
         error += std::to_string(job_id);
         error += " does not exist";
-        perror (error.c_str());
+         std::cerr << (error.c_str()) << std::endl;
         for (int i = 0; i < argc; ++i) {
             free(args[i]);
         }
         return;
     }
     //here maybe a check of was it successful is necessary
-    kill(job->pid, signum);
+    if (kill(job->pid, signum)!=0) {
+        perror("smash error: kill failed");
+    }
     std::cout << "signal number " << signum << " was sent to pid " << job->pid << std::endl;
     for (int i = 0; i < argc; ++i) {
         free(args[i]);
@@ -836,7 +838,7 @@ void UnSetEnvCommand::execute() {
     char *args[COMMAND_MAX_ARGS + 1];
     int argc = _parseCommandLine(cmd_line, args);
     if (argc <= 1) {
-        perror("smash error: unsetenv: not enough arguments");
+        std::cerr << ("smash error: unsetenv: not enough arguments") << std::endl;
         for (int i = 0; i < argc; ++i) {
             free(args[i]);
         }
@@ -871,10 +873,10 @@ void UnSetEnvCommand::execute() {
 
     std::string allEnvVar = std::string(buffer.begin(), buffer.end());
 
-    for (int i = 1; i < argc; ++i) {
-        std::string currentEnvVar = std::string(args[i]);
+    for (int k = 1; k < argc; ++k) {
+        std::string currentEnvVar = std::string(args[k]);
         if (allEnvVar.find(currentEnvVar + "=") == std::string::npos) {
-            perror(("smash error: unsetenv: " + currentEnvVar + " does not exist").c_str());
+            std::cerr << (("smash error: unsetenv: " + currentEnvVar + " does not exist").c_str()) << std::endl;
             for (int i = 0; i < argc; ++i) {
                 free(args[i]);
             }
@@ -915,19 +917,19 @@ SysInfoCommand::SysInfoCommand(const char *cmd_line): BuiltInCommand(cmd_line) {
 void SysInfoCommand::execute() {
     struct utsname uts{};
     if (uname(&uts) == -1) {
-        perror("smash error: sysinfo: uname failed");
+        perror("smash error: uname failed");
         return;
     }
 
     struct sysinfo si{};
     if (sysinfo(&si) == -1) {
-        perror("smash error: sysinfo: sysinfo failed");
+        perror("smash error: sysinfo failed");
         return;
     }
 
     time_t now = time(nullptr);
     if (now == (time_t)-1) {
-        perror("smash error: sysinfo: time failed");
+        perror("smash error: time failed");
         return;
     }
 
@@ -935,7 +937,7 @@ void SysInfoCommand::execute() {
 
     struct tm boot_tm{};
     if (!localtime_r(&boot_time, &boot_tm)) {
-        perror("smash error: sysinfo: localtime_r failed");
+        perror("smash error: localtime_r failed");
         return;
     }
 
@@ -1081,7 +1083,7 @@ void AliasCommand::execute() {
     char *args[COMMAND_MAX_ARGS+1];
     int argc = _parseCommandLine(cmd_line, args);
     if (argc>2) {
-        perror("smash error: alias: invalid alias format");
+        std::cerr << ("smash error: alias: invalid alias format") << std::endl;
         for (int i = 0; i < argc; ++i) {
             free(args[i]);
         }
@@ -1091,7 +1093,7 @@ void AliasCommand::execute() {
         std::string rest = args[1];
         size_t eq_pos = rest.find('=');
         if (eq_pos == std::string::npos) {
-            perror("smash error: alias: invalid alias format");
+            std::cerr<<("smash error: alias: invalid alias format")<<std::endl;
             for (int i = 0; i < argc; ++i) {
                 free(args[i]);
             }
@@ -1101,7 +1103,7 @@ void AliasCommand::execute() {
         std::string command = rest.substr(eq_pos+1);
         for (char c : alias) {
             if (!std::isalnum(c)&& c!='_') {
-                perror("smash error: alias: invalid alias format");
+                std::cerr<<("smash error: alias: invalid alias format")<<std::endl;
                 for (int i = 0; i < argc; ++i) {
                     free(args[i]);
                 }
@@ -1112,7 +1114,7 @@ void AliasCommand::execute() {
             std::string error = "smash error: alias: ";
             error += alias;
             error += " already exists or is a reserved command";
-            perror (error.c_str());
+            std::cerr << (error.c_str())<<std::endl;
             for (int i = 0; i < argc; ++i) {
                 free(args[i]);
             }
@@ -1126,7 +1128,7 @@ void AliasCommand::execute() {
                 std::string error = "smash error: alias: ";
                 error += alias;
                 error += " already exists or is a reserved command";
-                perror (error.c_str());
+                std::cerr<< (error.c_str())<<std::endl;
                 for (int i = 0; i < argc; ++i) {
                     free(args[i]);
                 }
@@ -1151,7 +1153,7 @@ void UnAliasCommand::execute() {
     char *args[COMMAND_MAX_ARGS+1];
     int argc = _parseCommandLine(cmd_line, args);
     if (argc<2) {
-        perror("smash error: unalias: not enough arguments");
+        std::cerr<<("smash error: unalias: not enough arguments")<<std::endl;
         for (int i = 0; i < argc; ++i) {
             free(args[i]);
         }
@@ -1162,7 +1164,7 @@ void UnAliasCommand::execute() {
             std::string error = "smash error: unalias: ";
             error += args[j];
             error += " does not exist";
-            perror (error.c_str());
+            std::cerr << (error.c_str()) << std::endl;
             for (int i = 0; i < argc; ++i) {
                 free(args[i]);
             }
@@ -1190,7 +1192,7 @@ void DiskUsageCommand::execute() {
 
     if (argc > 2) {
 
-        perror("smash error: du: too many arguments");
+        std::cerr << ("smash error: du: too many arguments") << std::endl;
         for (int i = 0; i < argc; ++i) {
             free(args[i]);
         }
@@ -1201,7 +1203,7 @@ void DiskUsageCommand::execute() {
         // no path given -> use cwd
         char cwd[PATH_MAX];
         if (!getcwd(cwd, sizeof(cwd))) {
-            perror("smash error: du: getcwd failed");
+            perror("smash error: getcwd failed");
             for (int i = 0; i < argc; ++i) {
                 free(args[i]);
             }
@@ -1248,7 +1250,7 @@ void WhoAmICommand::execute() {
     char buf[4096];
 
     if (getpwuid_r(uid, &pw, buf, sizeof(buf), &result) != 0 || !result) {
-        perror("smash error: whoami: getpwuid_r failed");
+        perror("smash error: getpwuid_r failed");
         return;
     }
 
@@ -1274,7 +1276,7 @@ void USBInfoCommand::execute() {
 
     std::vector<std::string> entries;
     if (!list_dir_entries(base, entries)) {
-        perror("smash error: usbinfo: cannot read /sys/bus/usb/devices");
+        perror("smash error: open failed");
         return;
     }
 
@@ -1341,7 +1343,7 @@ void USBInfoCommand::execute() {
     }
 
     if (devices.empty()) {
-        perror("smash error: usbinfo: no USB devices found");
+        std::cerr<<("smash error: usbinfo: no USB devices found")<<std::endl;
         return;
     }
 
