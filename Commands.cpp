@@ -356,7 +356,14 @@ PipeCommand::PipeCommand(const char *cmd_line): Command(cmd_line){}
 
 void PipeCommand::execute() {
     std::string line(cmd_line);
-    size_t pos = line.find('|');
+    size_t pos = line.find("|&");
+    bool is_stderr_pipe = false;
+    if(pos != std::string::npos) {
+        is_stderr_pipe = true;
+    }
+    else {
+        pos = line.find('|');
+    }
     std::string left  = _trim(line.substr(0, pos));
     std::string right = _trim(line.substr(pos + 1));
 
@@ -377,10 +384,19 @@ void PipeCommand::execute() {
     if (left_pid == 0) {
 
         setpgrp();
-        if (dup2(pipefd[1], STDOUT_FILENO) == -1) {
-            perror("smash error: dup2 failed");
-            exit(1);
+        if(is_stderr_pipe) {
+            if (dup2(pipefd[1], STDERR_FILENO) == -1) {
+                perror("smash error: dup2 failed");
+                exit(1);
+            }
         }
+        else {
+            if (dup2(pipefd[1], STDOUT_FILENO) == -1) {
+                perror("smash error: dup2 failed");
+                exit(1);
+            }
+        }
+
         close(pipefd[0]);
         close(pipefd[1]);
 
