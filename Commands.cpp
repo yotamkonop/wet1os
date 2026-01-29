@@ -365,7 +365,7 @@ void PipeCommand::execute() {
         pos = line.find('|');
     }
     std::string left  = _trim(line.substr(0, pos));
-    std::string right = _trim(line.substr(pos + 1));
+    std::string right = is_stderr_pipe ? _trim(line.substr(pos + 2)) : _trim(line.substr(pos + 1));
 
     int pipefd[2];
     if (pipe(pipefd) == -1) {
