@@ -1100,14 +1100,14 @@ AliasCommand::AliasCommand(const char *cmd_line, AliasMap *map) : BuiltInCommand
 void AliasCommand::execute() {
     char *args[COMMAND_MAX_ARGS+1];
     int argc = _parseCommandLine(cmd_line, args);
-    if (argc>2) {
+    if (0) {
         std::cerr << ("smash error: alias: invalid alias format") << std::endl;
         for (int i = 0; i < argc; ++i) {
             free(args[i]);
         }
         return;
     }
-    if (argc == 2) {
+    if (argc >= 2) {
         std::string rest = args[1];
         size_t eq_pos = rest.find('=');
         if (eq_pos == std::string::npos) {
@@ -1118,7 +1118,7 @@ void AliasCommand::execute() {
             return;
         }
         std::string alias = rest.substr(0, eq_pos);
-        std::string command = rest.substr(eq_pos+1);
+        std::string command = string(cmd_line).substr((eq_pos+2)+6, string(cmd_line).length()-1-((eq_pos+2)+6));
         for (char c : alias) {
             if (!std::isalnum(c)&& c!='_') {
                 std::cerr<<("smash error: alias: invalid alias format")<<std::endl;
